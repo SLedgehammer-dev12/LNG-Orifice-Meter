@@ -1,0 +1,102 @@
+name: v1.0 Sürüm Derleme ve Yayın
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Testler (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Kaynak kodu
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Motor testleri
+        run: python test_engine.py
+
+  build:
+    name: Derleme (${{ matrix.artifact }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: LNG-Orifice-Meter-windows-x64
+            display: "Windows x64"
+          - os: macos-14
+            artifact: LNG-Orifice-Meter-macOS-arm64
+            display: "macOS Apple Silicon (arm64)"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Kaynak kodu
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PyInstaller kurulumu
+        run: pip install -r requirements-build.txt
+      - name: Derleme (${{ matrix.display }})
+        run: pyinstaller --noconfirm --clean --windowed --onefile --name "LNG-Orifice-Meter" main.py
+        shell: bash
+      - name: Paketle (macOS .app → zip)
+        if: runner.os == 'macOS'
+        working-directory: dist
+        run: |
+          zip -r LNG-Orifice-Meter-macOS-arm64.zip "LNG-Orifice-Meter.app"
+          rm -rf "LNG-Orifice-Meter.app"
+      - name: Paketle (Windows .exe)
+        if: runner.os == 'Windows'
+        working-directory: dist
+        run: mv "LNG-Orifice-Meter.exe" LNG-Orifice-Meter-windows-x64.exe
+      - name: Derleme çıktısı
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/
+
+  release:
+    name: GitHub Sürümü Oluştur
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derlemeleri indir
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Paket listesi
+        run: find artifacts -type f | sort
+      - name: v1.0 Sürümünü yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          name: LNG Orifice Meter ${{ github.ref_name }}
+          body: |
+            ## LNG Orifis Ölçüm Noktası Tasarım Aracı — ${{ github.ref_name }}
+
+            **Çapraz platform yapılar:**
+            - `LNG-Orifice-Meter-windows-x64.exe` — Windows 10/11 x64
+            - `LNG-Orifice-Meter-macOS-arm64.zip` — macOS Apple Silicon (M1 Pro / M1 / M2 …)
+
+            **Kapsanan modeller:** Peng-Robinson EOS bubble point, Revised Klosek-Zander yoğunluk,
+            ISO 5167-2 (tam Reader-Harris/Gallagher flange taps), Newton-Raphson boyutlandırma,
+            flashing/kavitasyon + ASME B31.3 emniyet denetimi, N₂ duyarlılık analizi,
+            HTML rapor ve JSON çıktısı.
+
+            Detaylar: `README.md`
+          files: artifacts/**
+          draft: false
+          prerelease: false

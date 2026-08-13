@@ -1,0 +1,5 @@
+# Çalışma zamanı harici bağımlılık yoktur.
+# Yalnızca Python standart kütüphanesi kullanılır:
+#   math, tkinter, dataclasses, argparse, json, html
+#
+# Derleme (PyInstaller) için: requirements-build.txt
