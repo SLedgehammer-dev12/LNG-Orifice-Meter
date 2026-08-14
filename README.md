@@ -104,6 +104,18 @@ Bunlar olmadan sürüm güvenilirliğini aşağıdaki gibi sağlamlaştırıyoru
 Her sürümün yapıtları GitHub Actions'ta aynı kaynaktan derlenir; bir AV raporu alırsanız
 repo **Issues**'a bildirin.
 
+### macOS'ta açılışta çökme (SIGABRT)
+
+macOS yapıları **v1.1.1**'den itibaren Nuitka'nın geliştirme (develop) sürümüyle derlenir.
+Bunun nedeni, yayımlanan hiçbir Nuitka sürümünde (4.1.3 dahil) bulunmayan şu bug'dır:
+uygulama, Türkçe "ı" veya Japonca karakter gibi **çok baytlı UTF-8 içeren bir klasörde**
+(`/Applications/LNG-Orifice-Meter kopyası.app/…` gibi) çalıştırıldığında Nuitka'nın
+başlangıç yol dönüştürmesi (`appendStringSafeW` → `mbstowcs`) `abort()` çağırır ve uygulama
+daha hiç Python kodu çalışmadan çöker. Düzeltme Nuitka geliştirme dalındadır
+(commit `d6c396e5`, "macOS: Fix, do not runtime crash on Chinese app names"); v1.1.1 bu commit'e sabitlenmiştir
+(`requirements-build.txt`). Eski sürümlerde geçici çözüm: `.app`'i yalnızca ASCII karakterli
+bir yolda saklamak (örn. `/Applications/LNG-Orifice-Meter.app`).
+
 ## Uyarı
 
 Bu araç ön tasarım ve fizibilite içindir. Resmî ölçüm noktası tasarımı; kalibrasyon, montaj, legal metroloji onayı ve sahaya özel düz boru/bağlantı değerlendirmesi gerektirir.

@@ -1,3 +1,3 @@
-nuitka>=2.5,<3
+nuitka @ git+https://github.com/Nuitka/Nuitka.git@d6c396e57b75ebc4f2850995fd56b584f037823f
 ordered-set>=4.1
 zstandard>=0.22
