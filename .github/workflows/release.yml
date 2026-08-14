@@ -81,7 +81,8 @@ jobs:
         if: runner.os == 'macOS'
         working-directory: dist
         run: |
-          rm -rf "LNG-Orifice-Meter.dist"
+          rm -rf "LNG-Orifice-Meter.dist" "main.app"
+          mv "main.app" "LNG-Orifice-Meter.app"
           plutil -replace CFBundleShortVersionString -string "1.0.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
           plutil -replace CFBundleVersion -string "1.0.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
           plutil -replace CFBundleName -string "LNG Orifice Meter" "LNG-Orifice-Meter.app/Contents/Info.plist"
