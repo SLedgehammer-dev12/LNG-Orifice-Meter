@@ -157,6 +157,7 @@ class App(ttk.Frame):
         self._suppress_convert = False
 
         self._build_topbar()
+        self._build_menu()
         self._build_body()
         self.load_defaults()
         apply_theme(root, self.cfg["theme"])
@@ -191,6 +192,129 @@ class App(ttk.Frame):
         self.status_lbl.pack(side="right")
         ttk.Label(bar, text=f"v{APP_VERSION}", style="muted.TLabel").pack(side="right", padx=6)
 
+    # -------------------------------------------------------------------- menü
+    def _build_menu(self) -> None:
+        menubar = tk.Menu(self.root)
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="Hakkında", command=self.show_about)
+        help_menu.add_separator()
+        help_menu.add_command(label="Birimleri Doğrula", command=self.verify_units)
+        help_menu.add_command(label="Güncelleme Kontrolü", command=self.check_updates)
+        menubar.add_cascade(label="Yardım", menu=help_menu)
+        self.root.config(menu=menubar)
+
+    def show_about(self) -> None:
+        pal = palette()
+        win = tk.Toplevel(self.root)
+        win.title("Hakkında — LNG Orifis Ölçüm Noktası")
+        win.geometry("660x580")
+        win.minsize(500, 400)
+
+        frame = ttk.Frame(win)
+        frame.pack(fill="both", expand=True, padx=10, pady=(10, 6))
+
+        text = tk.Text(frame, wrap="word", height=30,
+                       bg=pal["surface"], fg=pal["text"], relief="flat",
+                       borderwidth=0, padx=14, pady=10,
+                       insertbackground=pal["text"], font=("TkDefaultFont", 10))
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        text.configure(yscrollcommand=vsb.set)
+        text.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        text.tag_configure("title", font=("TkDefaultFont", 13, "bold"),
+                           foreground=pal["accent"], spacing3=2)
+        text.tag_configure("sub", foreground=pal["text_muted"], spacing3=10)
+        text.tag_configure("hdr", font=("TkDefaultFont", 11, "bold"),
+                           foreground=pal["text"], spacing1=12, spacing3=2)
+        text.tag_configure("body", spacing1=1, spacing3=1)
+        text.tag_configure("bullet", lmargin1=20, lmargin2=34, spacing1=1)
+        text.tag_configure("note", foreground=pal["text_muted"], lmargin1=20, lmargin2=34)
+        text.tag_configure("warn", foreground=pal["warn"])
+
+        about: list[tuple[str, str]] = [
+            ("title", f"LNG Orifis Ölçüm Noktası Tasarım Aracı"),
+            ("sub", f"\nSürüm {APP_VERSION} · kriyojenik LNG hatları için ISO 5167-2 tabanlı "
+                    "ön boyutlandırma\n"),
+
+            ("hdr", "Amaç\n"),
+            ("body", "Araç; sıvı fazda (kriyojenik) LNG hatlarında orifis ölçüm noktasının "
+                     "ön boyutlandırmasını ve emniyet değerlendirmesini yapar. Bileşimi, "
+                     "çalışma şartlarını ve hedef basınç farkını girerek; deşarj katsayısını, "
+                     "oranları (β, d/D), orifis çapını, debi belirsizliğini, faz ayrışması "
+                     "(flashing/kavitasyon) riskini, ASME B31.3 et kalınlığı denetimini ve "
+                     "ısıl değer/enerji akışını çıktı olarak verir.\n"),
+
+            ("hdr", "Hesaplama Yöntemleri\n"),
+            ("bullet", "Termofiziksel özellikler (Peng-Robinson EOS):\n"),
+            ("body", "    Bileşim mol kesirlerinden ortalama molar kütle (M_mix) hesaplanır. "
+                     "Peng-Robinson durum denklemi ile zengin faz (bubble point) buhar basıncı "
+                     "Pv, fugacity eşitliğiyle iteratif olarak çözülür; bu, flashing "
+                     "güvenlik payının temeli Pv değeridir.\n"),
+            ("bullet", "Antoine / Raoult karşılaştırması:\n"),
+            ("body", "    İkincil doymuş sıvı buhar basıncı modeli (Antoine + Raoult). Düşük "
+                     "sıcaklıklarda (-163 °C) ekstrapolasyon içerdiği için birincil sonuç "
+                     "Peng-Robinson'dur; fark rapor ve konsol özetinde gösterilir.\n"),
+            ("bullet", "Sıvı yoğunluğu (Revised Klosek-Zander):\n"),
+            ("body", "    Kriyojenik LNG karışımlarına uygun Klosek-Zander korelasyonu işletme "
+                     "yoğunluğunu verir; debi, hız ve hacimsel çevrimler bu yoğunluğu kullanır.\n"),
+            ("bullet", "Orifis boyutlandırma (ISO 5167-2):\n"),
+            ("body", "    Tam Reader-Harris/Gallagher deşarj katsayısı C (flange taps; "
+                     "β, Re_D ve D'ye bağlı) kullanılır. D₂₀, sıcaklıkla termal genleşme "
+                     "(α₁K) ile işletme çapına taşınır. Kütle debisi eşitliği, Newton-Raphson "
+                     "ile β çözümü yapılarak orifis çapı d = β·D bulunur; Reynolds sayısı "
+                     "(Re_D) her iterasyonda güncellenir. β geçerlilik aralığı (ISO 5167-2 "
+                     "sınırları) denetlenir ve aşım durumunda uyarılır.\n"),
+            ("bullet", "Basınç farkı — debi ilişkisi:\n"),
+            ("body", "    ΔP ∝ q² mantığıyla q_min ve q_max oranlarındaki fark basınçları "
+                     "hesaplanır; hedeflenen ΔP ve seçilen plaka bu aralığı karşılar.\n"),
+            ("bullet", "Debi belirsizliği (ISO 5167):\n"),
+            ("body", "    Deşarj katsayısı (u(C)/C), boru çapı (u(D)/D), orifis çapı (u(d)/d) "
+                     "ve fark basınç (u(ΔP)/ΔP) belirsizlikleri, kısmi türev yaklaşımıyla "
+                     "bileşik debi belirsizliğine (u(q)/q) birleştirilir.\n"),
+            ("bullet", "Emniyet denetimleri:\n"),
+            ("body", "    Plaka sonrası toplam basınç (P₁ − ΔP − boru sürtünme kaybı; Haaland "
+                     "faktörü) buhar basıncının (Pv) altına düşerse FLASHING/KAVİTASYON uyarısı. "
+                     "ASME B31.3 ile minimum gereken et kalınlığı (P·D/(2(S·E + P·Y)) + c) "
+                     "hesaplanıp girilen et kalınlığıyla karşılaştırılır.\n"),
+            ("bullet", "Isıl değer ve enerji akışı:\n"),
+            ("body", "    Bileşen molar yanma ısılarından (MJ/kmol, 25 °C / 1 atm) karışımın "
+                     "üst (GCV/HHV) ve alt (NCV/LHV) ısıl değeri; MJ/kg, MJ/kmol ve MJ/Nm³ "
+                     "türevleriyle hesaplanır. Kütle debisi × GCV ile termal güç (MW) verilir.\n"),
+            ("bullet", "N₂ duyarlılık analizi:\n"),
+            ("body", "    Azot içeriği 0–2× aralığında taranır; Pv, yoğunluk ve emniyet payının "
+                     "değişimi raporlanır.\n"),
+
+            ("hdr", "Birim Sistemi\n"),
+            ("body", "Motor her zaman kanonik birimlerde çalışır (sıcaklık °C, basınç bar-a, çap "
+                     "mm, kütle debisi t/h, ΔP mbar, yoğunluk kg/m³, hız m/s, ısıl değer MJ/kg, "
+                     "enerji akışı MW). Arayüzde her girdi ve sonuç satırı için birim bağımsız "
+                     "seçilebilir; hacimsel debi (m³/h, L/min, gpm…) ve enerji debisi (MW, "
+                     "MMBtu/h) son hesaplanan yoğunluk/GCV kullanılarak çevrilir. 'Birimleri "
+                     "Doğrula' tüm dönüşümleri round-trip ve referans sabitleriyle kontrol eder.\n"),
+
+            ("hdr", "Kullanım\n"),
+            ("bullet", "Sol paneldeki girdileri doldurun → 'Hesapla' (veya ilgili kutuda Enter).\n"),
+            ("bullet", "Birim profilini değiştirmek ('SI / US / Karışık') tüm değerleri fiziksel "
+                       "değeri koruyarak çevirir.\n"),
+            ("bullet", "Sonuçlar satır bazlı birim seçimine açıktır; sağ alttaki şematik gösterim "
+                       "canlı güncellenir.\n"),
+            ("bullet", "'HTML Rapor Dışa Aktar' aydınlık şema dahil tam rapor; komut satırında "
+                       "--json ile makine-okunur çıktı alınabilir.\n"),
+
+            ("hdr", "Uyarı\n"),
+            ("warn", "Bu araç ön tasarım ve fizibilite amaçlıdır. Resmî ölçüm noktası; "
+                     "kalibrasyon, montaj, yasal metroloji onayı ve sahaya özel düz "
+                     "boru/bağlantı değerlendirmesi gerektirir."),
+        ]
+
+        text.insert("1.0", "")
+        for tag, content in about:
+            text.insert("end", content, tag)
+        text.configure(state="disabled")
+
+        ttk.Button(win, text="Kapat", command=win.destroy).pack(pady=(0, 10))
+
     # -------------------------------------------------------------------- gövde
     def _build_body(self) -> None:
         paned = ttk.PanedWindow(self, orient="horizontal")
@@ -202,7 +326,9 @@ class App(ttk.Frame):
         paned.add(left, weight=0)
         paned.add(right, weight=1)
 
-        self._build_inputs(left)
+        self.inputs_scroll = ScrollFrame(left)
+        self.inputs_scroll.pack(fill="both", expand=True)
+        self._build_inputs(self.inputs_scroll.inner)
 
         rp = ttk.PanedWindow(right, orient="vertical")
         rp.pack(fill="both", expand=True)
@@ -219,46 +345,53 @@ class App(ttk.Frame):
         self.schematic_canvas.bind("<Configure>", lambda _e: self._schedule_redraw())
         self.results_inner = self.results_scroll.inner
 
-    def _simple_field(self, frm, row: int, col: int, key: str, label: str, default: str,
-                      tip: str) -> None:
-        frm.grid_columnconfigure(col * 2, weight=1)
-        ttk.Label(frm, text=label).grid(row=row, column=col * 2, sticky="w", padx=(8, 2), pady=2)
-        var = tk.StringVar(value=default)
-        ent = ttk.Entry(frm, textvariable=var, width=10, justify="right")
-        ent.grid(row=row, column=col * 2 + 1, sticky="e", padx=(2, 8), pady=2)
-        if tip:
-            ToolTip(ent, tip)
-            ttk.Label(frm, text="?", style="sec.TLabel", cursor="hand2").grid(
-                row=row, column=col * 2 + 2, padx=(0, 2))
-        self.field_vars[key] = var
+    def _field_cell(self, frm, row: int, col: int, key: str, label: str, default: str,
+                    tip: str, cat: str | None = None, suffix: str | None = None,
+                    desc: str | None = None) -> None:
+        """Hücre tabanlı girdi alanı: üstte etiket (+?), ortada giriş + birim/sonek,
+        altta kısa açıklama metni (desc) — kalıcı ve görünür.
 
-    def _unit_field(self, frm, row: int, col: int, key: str, label: str, cat: str,
-                    default: str, tip: str) -> None:
+        - `cat` verildiğinde birim seçici (combobox) eklenir.
+        - `suffix` verildiğinde (örn. "%") birim yerine sabit sonek gösterilir.
+        """
         cell = ttk.Frame(frm)
         cell.grid(row=row, column=col, sticky="ew", padx=6, pady=3)
         cell.columnconfigure(0, weight=1)
+
         lab = ttk.Label(cell, text=label)
         lab.grid(row=0, column=0, sticky="w")
         if tip:
-            ttk.Label(cell, text="?", style="sec.TLabel", cursor="hand2").grid(row=0, column=1)
             ToolTip(lab, tip)
+            mark = ttk.Label(cell, text="?", style="sec.TLabel", cursor="hand2")
+            mark.grid(row=0, column=1, padx=(0, 2))
+            ToolTip(mark, tip)
 
         var = tk.StringVar(value=default)
         ent = ttk.Entry(cell, textvariable=var, width=12, justify="right")
         ent.grid(row=1, column=0, sticky="ew", padx=(0, 4))
-        uvar = tk.StringVar(value=default_unit(cat, self.cfg["preset"]))
-        combo = ttk.Combobox(cell, textvariable=uvar, state="readonly", width=9,
-                             values=U.unit_options(cat))
-        combo.grid(row=1, column=1, sticky="e")
+        ent.bind("<Return>", lambda _e: self.run_calc())
         if tip:
             ToolTip(ent, tip)
 
+        if suffix:
+            ttk.Label(cell, text=suffix).grid(row=1, column=1, sticky="w")
+        else:
+            uvar = tk.StringVar(value=default_unit(cat, self.cfg["preset"]))
+            combo = ttk.Combobox(cell, textvariable=uvar, state="readonly", width=9,
+                                 values=U.unit_options(cat))
+            combo.grid(row=1, column=1, sticky="e")
+            self.unit_vars[key] = uvar
+            self._prev_unit[(key, cat)] = uvar.get()
+            combo.bind("<<ComboboxSelected>>",
+                       lambda _e, k=key, c=cat, v=uvar: self._on_unit_changed(k, c, v))
+            uvar.trace_add("write",
+                           lambda *_, k=key, c=cat, v=uvar: self._on_unit_var_write(k, c, v))
+
+        if desc:
+            ttk.Label(cell, text=desc, style="hint.TLabel", wraplength=180,
+                      justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(1, 0))
+
         self.field_vars[key] = var
-        self.unit_vars[key] = uvar
-        self._prev_unit[(key, cat)] = uvar.get()
-        combo.bind("<<ComboboxSelected>>",
-                   lambda _e, k=key, c=cat, v=uvar: self._on_unit_changed(k, c, v))
-        uvar.trace_add("write", lambda *_, k=key, c=cat, v=uvar: self._on_unit_var_write(k, c, v))
         var.trace_add("write", lambda *_: self._schedule_redraw())
 
     def _on_unit_var_write(self, key: str, cat: str, var: tk.StringVar, *_args) -> None:
@@ -286,71 +419,75 @@ class App(ttk.Frame):
             var = tk.StringVar(value="0.000")
             ent = ttk.Entry(comp_frm, textvariable=var, width=10, justify="right")
             ent.grid(row=r, column=c * 2, sticky="ew", padx=(8, 2), pady=2)
-            ttk.Label(comp_frm, text=COMP_LABELS[comp]).grid(row=r, column=c * 2 + 1, sticky="w")
+            lab = ttk.Label(comp_frm, text=COMP_LABELS[comp])
+            lab.grid(row=r, column=c * 2 + 1, sticky="w")
+            ent.bind("<Return>", lambda _e: self.run_calc())
+            ToolTip(lab, f"{comp} mol kesri (0 … 1).")
+            ToolTip(ent, f"{comp} mol kesri (0 … 1).")
             self.comp_vars[comp] = var
             var.trace_add("write", lambda *_: self._update_comp_sum())
         ttk.Label(comp_frm, text="Toplam:").grid(row=4, column=0, sticky="e", pady=(4, 2))
         self.comp_sum_lbl = ttk.Label(comp_frm, text="", style="sec.TLabel")
         self.comp_sum_lbl.grid(row=4, column=1, columnspan=2, sticky="w")
+        ttk.Label(comp_frm, text="Mol kesirleri 0–1 aralığında verilir; toplam 1.0000 olmalıdır "
+                  "(hesap öncesi otomatik normalize edilir).",
+                  style="hint.TLabel", wraplength=400, justify="left").grid(
+            row=5, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 4))
 
         proc_frm = ttk.LabelFrame(left, text=" 2. Proses Şartları ")
         proc_frm.pack(fill="x", pady=4)
         proc_frm.columnconfigure(0, weight=1)
         proc_frm.columnconfigure(1, weight=1)
-        self._unit_field(proc_frm, 0, 0, "T1", "Sıcaklık T₁", "temperature", "-163.0",
-                         "Çalışma sıcaklığı. LNG için ≈ -160 … -150 °C.")
-        self._unit_field(proc_frm, 0, 1, "P1", "Emiş basıncı P₁", "pressure", "8.5",
-                         "Hat emiş basıncı (varsayılan bar-g; gösterge/mutlak seçilebilir).")
+        self._field_cell(proc_frm, 0, 0, "T1", "Sıcaklık T₁", "-163.0",
+                         "Çalışma sıcaklığı. LNG için ≈ -160 … -150 °C.",
+                         cat="temperature",
+                         desc="Akışkan sıcaklığı; termofiziksel özellikleri belirler.")
+        self._field_cell(proc_frm, 0, 1, "P1", "Emiş basıncı P₁", "8.5",
+                         "Hat emiş basıncı (varsayılan bar-g; gösterge/mutlak seçilebilir).",
+                         cat="pressure",
+                         desc="Hattaki işletme basıncı; P₂ = P₁ − ΔP oranında düşer.")
 
         pipe_frm = ttk.LabelFrame(left, text=" 3. Boru ve Akış ")
         pipe_frm.pack(fill="x", pady=4)
         pipe_frm.columnconfigure(0, weight=1)
         pipe_frm.columnconfigure(1, weight=1)
-        self._unit_field(pipe_frm, 0, 0, "D20", "İç çap D₂₀", "diameter", "300.0",
-                         "Boru iç çapı @20°C.")
-        self._unit_field(pipe_frm, 0, 1, "Qm", "Nominal debi Qm", "flow", "150.0",
+        self._field_cell(pipe_frm, 0, 0, "D20", "İç çap D₂₀", "300.0",
+                         "Boru iç çapı @20°C.", cat="diameter",
+                         desc="Flans ve orifis plakasının devreye alındığı hat iç çapı.")
+        self._field_cell(pipe_frm, 0, 1, "Qm", "Nominal debi Qm", "150.0",
                          "Nominal debi. Kütle, hacimsel (sıvı) ve enerji birimleri desteklenir;\n"
-                         "hacimsel/enerji birimleri son hesaplanan yoğunluk/GCV ile çevrilir.")
-        self._unit_field(pipe_frm, 1, 0, "dP", "Hedef ΔP", "dp", "250.0",
-                         "Nominal akıştaki hedeflenen plaka basınç farkı.")
-        self._simple_field(pipe_frm, 1, 1, "qmin", "Turndown min (%)", "30",
-                           "Minimum debi oranı (%).")
-        self._simple_field(pipe_frm, 2, 0, "qmax", "Turndown max (%)", "120",
-                           "Maksimum debi oranı (%).")
-        self._unit_field(pipe_frm, 2, 1, "L", "Hat uzunluğu L", "length", "50",
-                         "Boru uzunluğu — flashing hesabında sürtünme kaybı içindir.")
+                         "hacimsel/enerji birimleri son hesaplanan yoğunluk/GCV ile çevrilir.",
+                         cat="flow",
+                         desc="Tasarımın baz alındığı nominal kütle/hacim/enerji akışı.")
+        self._field_cell(pipe_frm, 1, 0, "dP", "Hedef ΔP", "250.0",
+                         "Nominal akıştaki hedeflenen plaka basınç farkı.", cat="dp",
+                         desc="Ölçülecek fark basınç; plaka çapı seçimini (β) belirler.")
+        self._field_cell(pipe_frm, 1, 1, "L", "Hat uzunluğu L", "50",
+                         "Boru uzunluğu — flashing hesabında sürtünme kaybı içindir.",
+                         cat="length",
+                         desc="Flanştan sonraki hat uzunluğu; faz ayrışması kontrolünde sürtünme kaybı.")
+        self._field_cell(pipe_frm, 2, 0, "qmin", "Turndown min", "30",
+                         "Minimum debi oranı (%).", suffix="%",
+                         desc="Ölçüm aralığının alt sınırı (nominal debinin yüzdesi).")
+        self._field_cell(pipe_frm, 2, 1, "qmax", "Turndown max", "120",
+                         "Maksimum debi oranı (%).", suffix="%",
+                         desc="Ölçüm aralığının üst sınırı; qmax ΔP üst limitini belirler.")
 
-        mat_frm = ttk.Frame(pipe_frm)
-        mat_frm.grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=3)
-        ttk.Label(mat_frm, text="Malzeme").pack(side="left")
+        mat_cell = ttk.Frame(pipe_frm)
+        mat_cell.grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=3)
+        mat_cell.columnconfigure(0, weight=1)
+        ttk.Label(mat_cell, text="Malzeme").grid(row=0, column=0, sticky="w")
         self.mat_var = tk.StringVar(value="AISI 304")
-        mat_combo = ttk.Combobox(mat_frm, textvariable=self.mat_var, state="readonly", width=9,
-                                 values=("AISI 304", "AISI 316"))
-        mat_combo.pack(side="left", padx=6)
-        ttk.Label(mat_frm, text="Boru OD").pack(side="left", padx=(10, 2))
-        odvar = tk.StringVar(value="323.9")
-        ttk.Entry(mat_frm, textvariable=odvar, width=7, justify="right").pack(side="left")
-        odunit = tk.StringVar(value="mm")
-        odcombo = ttk.Combobox(mat_frm, textvariable=odunit, state="readonly", width=4,
-                               values=("mm", "in"))
-        odcombo.pack(side="left", padx=(2, 0))
-        ttk.Label(mat_frm, text="t:").pack(side="left", padx=(6, 2))
-        tvar = tk.StringVar(value="9.53")
-        ttk.Entry(mat_frm, textvariable=tvar, width=6, justify="right").pack(side="left")
-        tunit = tk.StringVar(value="mm")
-        tcombo = ttk.Combobox(mat_frm, textvariable=tunit, state="readonly", width=4,
-                              values=("mm", "in"))
-        tcombo.pack(side="left", padx=(2, 0))
-        self.field_vars["OD"] = odvar
-        self.field_vars["t"] = tvar
-        self.unit_vars["OD"] = odunit
-        self.unit_vars["t"] = tunit
-        self._prev_unit[("OD", "diameter")] = "mm"
-        self._prev_unit[("t", "diameter")] = "mm"
-        odcombo.bind("<<ComboboxSelected>>", lambda _e: self._on_unit_changed("OD", "diameter", odunit))
-        tcombo.bind("<<ComboboxSelected>>", lambda _e: self._on_unit_changed("t", "diameter", tunit))
-        odunit.trace_add("write", lambda *_: self._on_unit_var_write("OD", "diameter", odunit))
-        tunit.trace_add("write", lambda *_: self._on_unit_var_write("t", "diameter", tunit))
+        mat_combo = ttk.Combobox(mat_cell, textvariable=self.mat_var, state="readonly",
+                                 width=12, values=("AISI 304", "AISI 316"))
+        mat_combo.grid(row=1, column=0, sticky="w")
+
+        self._field_cell(pipe_frm, 4, 0, "OD", "Boru OD", "323.9",
+                         "Boru dış çapı.", cat="diameter",
+                         desc="Boru dış çapı — B31.3 et kalınlığı denetiminde kullanılır.")
+        self._field_cell(pipe_frm, 4, 1, "t", "Et kalınlığı t", "9.53",
+                         "Et kalınlığı.", cat="diameter",
+                         desc="Mevcut et kalınlığı; minimum gereken et kalınlığıyla karşılaştırılır.")
 
         adv_frm = ttk.LabelFrame(left, text=" 4. Gelişmiş (belirsizlik girdileri) ")
         adv_frm.pack(fill="x", pady=4)
@@ -358,7 +495,8 @@ class App(ttk.Frame):
         adv_frm.columnconfigure(1, weight=1)
         for i, (key, label, default, tip) in enumerate(ADV_DEFS):
             r, c = divmod(i, 2)
-            self._simple_field(adv_frm, r, c, key, label + " (%)", default, tip)
+            self._field_cell(adv_frm, r, c, key, label, default, tip, suffix="%",
+                             desc="Debi belirsizliğine (u(q)/q) katkı oranı.")
 
     # ------------------------------------------------------------ girdi/birimler
     def _input_ctx(self) -> dict:

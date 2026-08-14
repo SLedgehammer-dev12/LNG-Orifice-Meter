@@ -137,6 +137,8 @@ def apply(root: tk.Tk, mode: str) -> None:
     st.configure("emph.TLabel", background=pal["surface"], foreground=pal["text"])
     st.configure("hdr.TLabel", background=pal["surface"], foreground=pal["text"])
     st.configure("sec.TLabel", background=pal["surface"], foreground=pal["accent"])
+    st.configure("hint.TLabel", background=pal["surface"], foreground=pal["text_muted"],
+                 font=("TkDefaultFont", 8))
 
     root.configure(bg=pal["bg"])
     try:
