@@ -15,6 +15,7 @@ except (AttributeError, ValueError):
 from engine import RunInputs, run_engineering
 from report import print_console_summary, write_html
 from ui_data import build_sections
+from updater import compare_versions, platform_asset
 
 BOTAŞ_COMP = {
     "CH4": 0.915,
@@ -116,6 +117,26 @@ def main() -> None:
     sections = build_sections(r)
     check("5 bölüm üretir", len(sections) >= 4, str(len(sections)))
     check("termo bölümü dolu", len(sections[0][1]) >= 5)
+
+    print("\n-- Güncelleme modülü (ağ gerektirmez) --")
+    check("1.0 < 1.1", compare_versions("1.0", "1.1"))
+    check("v1.0.0 < v1.1", compare_versions("v1.0.0", "v1.1"))
+    check("1.1 == 1.1", not compare_versions("1.1", "v1.1"))
+    check("1.2 > 1.1", not compare_versions("1.2", "1.1"))
+    check("1.0.9 < 1.0.10", compare_versions("1.0.9", "1.0.10"))
+    check("önemli değil 2.0 > 1.x", compare_versions("1.9.9", "2.0.0"))
+    win_assets = {"LNG-Orifice-Meter-windows-x64.exe": "u1", "LNG-Orifice-Meter-macOS-arm64.zip": "u2"}
+    mac_assets = {"LNG-Orifice-Meter-macOS-arm64.zip": "u1", "LNG-Orifice-Meter-macOS-x64.zip": "u2"}
+    if sys.platform.startswith("win"):
+        sel = (platform_asset(win_assets) or (None, None))[0]
+        check("windows exe seçer", sel == "LNG-Orifice-Meter-windows-x64.exe", sel or "-")
+    elif sys.platform == "darwin":
+        sel = (platform_asset(win_assets) or (None, None))[0]
+        check("mac arm64 öncelikli", sel == "LNG-Orifice-Meter-macOS-arm64.zip", sel or "-")
+    else:
+        sel = (platform_asset(mac_assets) or (None, None))[0]
+        check("linux asset seçer", sel is not None, sel or "-")
+    check("asset yoksa None", platform_asset({}) is None)
 
     print_console_summary(r)
 

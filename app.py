@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from engine import RunInputs, run_engineering
 from report import build_html, print_console_summary
 from ui_data import build_sections
+from updater import APP_VERSION, check_for_updates, download, platform_asset, reveal_in_folder
 
 APP_TITLE = "LNG Orifis Ölçüm Noktası Tasarım Aracı"
-APP_VERSION = "v1.0"
 
 BOTAŞ_DEFAULT_COMP = {
     "CH4": 0.915,
@@ -77,10 +78,12 @@ class App(ttk.Frame):
         self.comp_vars: dict[str, tk.StringVar] = {}
         self.field_vars: dict[str, tk.StringVar] = {}
         self.result: object = None
+        self._checking = False
 
         self._build_topbar()
         self._build_body()
         self.load_defaults()
+        self.root.after(1800, lambda: self.check_updates(auto=True))
 
     def _build_topbar(self) -> None:
         bar = ttk.Frame(self)
@@ -89,9 +92,10 @@ class App(ttk.Frame):
         ttk.Button(bar, text="Varsayılanları Yükle", command=self.load_defaults).pack(side="left", padx=6)
         ttk.Button(bar, text="HTML Rapor Dışa Aktar", command=self.export_html).pack(side="left")
         ttk.Button(bar, text="Çıktıyı Temizle", command=self.clear_results).pack(side="left", padx=6)
+        ttk.Button(bar, text="Güncelleme Kontrolü", command=self.check_updates).pack(side="left")
         self.status_lbl = ttk.Label(bar, text="·", font=("TkDefaultFont", 11, "bold"))
         self.status_lbl.pack(side="right")
-        ttk.Label(bar, text=APP_VERSION, foreground="#8a97a5").pack(side="right", padx=6)
+        ttk.Label(bar, text=f"v{APP_VERSION}", foreground="#8a97a5").pack(side="right", padx=6)
 
     def _build_body(self) -> None:
         paned = ttk.PanedWindow(self, orient="horizontal")
@@ -311,6 +315,62 @@ class App(ttk.Frame):
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(html)
         messagebox.showinfo("Rapor", f"Rapor kaydedildi:\n{path}")
+
+    def check_updates(self, auto: bool = False) -> None:
+        if self._checking:
+            return
+        self._checking = True
+
+        def worker() -> None:
+            info = check_for_updates()
+            self.root.after(0, lambda: self._on_check_done(info, auto))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_check_done(self, info, auto: bool) -> None:
+        self._checking = False
+        if info.error:
+            if not auto:
+                messagebox.showwarning("Güncelleme Kontrolü",
+                                       f"Sürüm kontrolü yapılamadı.\n\n{info.error}")
+            return
+        if not info.has_update:
+            if not auto:
+                messagebox.showinfo("Güncelleme Kontrolü",
+                                    f"Program güncel: v{info.current_version}")
+            return
+        if not messagebox.askyesno(
+            "Yeni Sürüm",
+            f"Yeni sürüm v{info.latest_version} mevcut!\n"
+            f"Şu anki sürümünüz: v{info.current_version}\n\n"
+            f"İndirilip klasörde açılsın mı?\nSatır: {info.release_url}",
+        ):
+            return
+        self._download_latest(info)
+
+    def _download_latest(self, info) -> None:
+        name_url = platform_asset(info.assets)
+        if name_url is None:
+            messagebox.showinfo("İndirme",
+                                f"Bu platform için indirilebilir dosya bulunamadı.\n"
+                                f"Sayfadan elle indirebilirsiniz:\n{info.release_url}")
+            return
+        name, url = name_url
+
+        def worker() -> None:
+            try:
+                path = download(url, filename=name)
+            except Exception as e:  # noqa: BLE001
+                self.root.after(0, lambda err=e: messagebox.showerror("İndirme Hatası", str(err)))
+                return
+            reveal_in_folder(path)
+            self.root.after(0, lambda p=path: messagebox.showinfo(
+                "İndirme Tamam",
+                f"v{info.latest_version} indirildi:\n{p}\n\n"
+                f"Dosyayı açıp LNG-Orifice-Meter uygulamasını çalıştırın.",
+            ))
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 def main() -> None:

@@ -12,6 +12,8 @@ Kriyojenik LNG hatlarında **orifis ölçüm noktası boyutlandırması** için 
 - **ISO 5167-2 boyutlandırma:** Tam Reader-Harris/Gallagher (flange taps) deşarj katsayısı, Newton-Raphson çözücü (bisection yedekli), akış belirsizliği.
 - **Emniyet denetimi:** Flashing/kavitasyon (boru sürtünme kaybı dahil), Pvc/vena contracta, ASME B31.3 minimum et kalınlığı.
 - **N₂ duyarlılık analizi** ve açıklayıcı HTML raporu.
+- **Güncelleme kontrolü:** GitHub Releases üzerinden en son sürümü otomatik (açılışta)
+  ve manuel (GUI butonu / CLI bayrağı) kontrol eder; yeni sürümü indirme yardımcısı.
 
 ## Gereksinim
 
@@ -35,6 +37,13 @@ python main.py --cli --qm 200 --dp 300 --qmin 25 --qmax 130 --out rapor.html --j
 Parametreler: `--t1 --p1 --d20 --qm --dp --qmin --qmax --L --od --t --comp --out --json --no-html`
 
 Bileşim: `--comp "CH4:0.915,C2H6:0.055,C3H8:0.018,iC4:0.004,nC4:0.004,iC5:0.001,nC5:0.001,N2:0.002"`
+
+Güncelleme kontrolü / indirme:
+
+```
+python main.py --check-updates   # en son sürümü kontrol eder (GUI başlatmaz)
+python main.py --update          # en son sürümü ~/Downloads'a indirir ve klasörde açar
+```
 
 ## Testler
 

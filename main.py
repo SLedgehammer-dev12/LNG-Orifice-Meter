@@ -4,6 +4,8 @@ Kullanım:
     python3 main.py                    # Tkinter masaüstü arayüzünü başlatır
     python3 main.py --cli              # Komut satırı hesabı (BOTAŞ varsayılanları)
     python3 main.py --cli --qm 200 --dp 300 --out rapor.html
+    python3 main.py --check-updates    # En son sürümü kontrol eder
+    python3 main.py --update           # En son sürümü indirir
     python3 test_engine.py             # Motor doğrulama testlerini çalıştırır
 """
 
@@ -16,6 +18,7 @@ from datetime import datetime
 
 from engine import RunInputs, run_engineering
 from report import print_console_summary, write_html
+from updater import APP_VERSION, check_for_updates, download, platform_asset, reveal_in_folder
 
 BOTAŞ_DEFAULT_COMP = {
     "CH4": 0.915,
@@ -66,6 +69,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", type=str, default=None, help="HTML rapor yolu (varsayılan: lng_orifice_rapor.html).")
     p.add_argument("--no-html", action="store_true", help="HTML raporu üretme.")
     p.add_argument("--json", type=str, default=None, help="Sonuçları JSON dosyasına yaz.")
+    p.add_argument("--check-updates", action="store_true",
+                   help="GitHub Releases'tan en son sürümü kontrol et (GUI başlatmaz).")
+    p.add_argument("--update", action="store_true",
+                   help="En son sürümü indir (varsayılan: ~/Downloads) ve klasörde göster.")
     return p
 
 
@@ -167,8 +174,42 @@ def run_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_updates(args: argparse.Namespace) -> int:
+    _ensure_utf8_stdio()
+    info = check_for_updates()
+    print(f"Şu anki sürüm : v{info.current_version}")
+    if info.error:
+        print(f"Sürüm kontrolü yapılamadı: {info.error}")
+        return 1
+    print(f"En son sürüm  : v{info.latest_version}")
+    if not info.has_update:
+        print("Durum         : Güncel — güncelleme gerekmiyor.")
+        return 0
+
+    print("Durum         : GÜNCELLEME MEVCUT")
+    if not args.update:
+        print(f"Sayfa         : {info.release_url}")
+        return 0
+
+    name_url = platform_asset(info.assets)
+    if name_url is None:
+        print(f"Bu platform için indirilebilir dosya bulunamadı.\nSayfa: {info.release_url}")
+        return 1
+    name, url = name_url
+    try:
+        path = download(url, filename=name)
+    except Exception as e:  # noqa: BLE001
+        print(f"İndirme hatası: {e}", file=sys.stderr)
+        return 1
+    reveal_in_folder(path)
+    print(f"İndirildi      : {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.check_updates or args.update:
+        return run_updates(args)
     if args.cli:
         return run_cli(args)
     try:
