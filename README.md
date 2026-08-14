@@ -46,15 +46,54 @@ python test_engine.py
 
 GitHub Actions `release` workflow'u `v*` etiketlerinde otomatik derler:
 
-- **Windows x64** → `LNG-Orifice-Meter.exe`
+- **Windows x64** → `LNG-Orifice-Meter-windows-x64.exe`
 - **macOS Apple Silicon (arm64, M1 Pro uyumlu)** → `.app.zip`
+
+**Neden Nuitka?** Yapılar PyInstaller ile değil, **Nuitka** (C'ye derleyen) ile üretilir.
+PyInstaller `--onefile` bootloader'ı (belleğe açılan kendi kendine paket) antivirüs
+heuristiklerinde popüler bir yanlış pozitif kaynağıdır. Nuitka gerçek makine kodu üretir;
+bu, AV uyarılarını önemli ölçüde azaltır. Ayrıca yapılara doğru ürün/sürüm meta verisi
+eklenir (Windows PE) ve macOS'ta ad-hoc kod imzası atılır.
 
 Yerel derleme:
 
 ```
 pip install -r requirements-build.txt
-pyinstaller --noconfirm --clean --windowed --onefile --name "LNG-Orifice-Meter" main.py
+# Windows:
+python -m nuitka --standalone --onefile --enable-plugin=tk-inter --windows-console-mode=disable --output-filename="LNG-Orifice-Meter" main.py
+# macOS (.app):
+python -m nuitka --standalone --enable-plugin=tk-inter --macos-create-app-bundle --macos-app-mode=gui main.py
 ```
+
+## Güvenlik / Antivirüs Uyarıları
+
+İmzasız ikili dosyalar her zaman bazı antivirüs/Gatekeeper heuristiklerine takılabilir.
+Bunun gerçek ve kalıcı çözümü, **ticari kod imzası** gerektirir:
+
+- **Windows (SmartScreen):** Microsoft Authenticode sertifikası ile sağlanan imza,
+  SmartScreen uyarısını kaldırır. Sertifika yıllık ücretlidir.
+- **macOS (Gatekeeper):** Apple Developer ID sertifikası + **notarization** gerekir
+  (yıllık Apple Developer programı).
+
+Bunlar olmadan sürüm güvenilirliğini aşağıdaki gibi sağlamlaştırıyoruz:
+
+1. **Doğal kod derleme (Nuitka)** — bootloader/açılma noktası yerine gerçek makine kodu.
+2. **Windows PE meta verisi** — dosya açıklaması, sürüm, şirket adı.
+3. **macOS ad-hoc imza** — bütünlük doğrulama imkânı; `spctl` Gatekeeper'ı yine de
+   engeller (imzalanmamış/notarize edilmemiş indirmelerde).
+
+**Güvenli çalıştırma adımları:**
+
+- İndirmeyi yalnızca resmî **Releases** sayfasından yapın; indirdiğiniz dosyanın
+  SHA-256 özetini kontrol edin.
+- **Windows:** `SmartScreen → More info → Run anyway`; sonraki açılışlarda uyarı çıkmaz.
+- **macOS:** Sağ tık (veya Control+tık) → **Aç**, ardından "Aç" seçeneğine tıklayın.
+  Kalıcı çözüm: `xattr -dr com.apple.quarantine "/indirilen yol/LNG-Orifice-Meter.app"`.
+- Kaynak koddan da çalıştırabilirsiniz: `python main.py` (bu yolda ikili doğrulama
+  gereksinimi yoktur).
+
+Her sürümün yapıtları GitHub Actions'ta aynı kaynaktan derlenir; bir AV raporu alırsanız
+repo **Issues**'a bildirin.
 
 ## Uyarı
 

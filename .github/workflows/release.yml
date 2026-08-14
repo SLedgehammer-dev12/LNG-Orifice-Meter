@@ -37,11 +37,26 @@ jobs:
           - os: windows-latest
             artifact: LNG-Orifice-Meter-windows-x64
             display: "Windows x64"
-            pyinstaller_args: --onefile
+            nuitka_extra: >-
+              --onefile
+              --windows-console-mode=disable
+              --windows-company-name="SLedgehammer Engineering"
+              --windows-product-name="LNG Orifice Meter"
+              --windows-file-description="LNG Orifice Meter - ISO 5167-2 orifis boyutlandirma araci"
+              --windows-file-version=1.0.0.0
+              --windows-product-version=1.0.0
+              --windows-legal-copyright="Copyright (c) 2026"
           - os: macos-14
             artifact: LNG-Orifice-Meter-macOS-arm64
             display: "macOS Apple Silicon (arm64)"
-            pyinstaller_args: ""
+            nuitka_extra: >-
+              --macos-create-app-bundle
+              --macos-app-mode=gui
+              --macos-app-name="LNG-Orifice-Meter"
+              --macos-app-display-name="LNG Orifice Meter"
+              --macos-app-version="1.0.0"
+              --macos-app-copyright="Copyright (c) 2026"
+              --macos-app-company-name="SLedgehammer Engineering"
     runs-on: ${{ matrix.os }}
     steps:
       - name: Kaynak kodu
@@ -50,21 +65,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: PyInstaller kurulumu
+      - name: Derleme bağımlılıkları (Nuitka)
         run: pip install -r requirements-build.txt
-      - name: Derleme (${{ matrix.display }})
-        run: pyinstaller --noconfirm --clean --windowed ${{ matrix.pyinstaller_args }} --name "LNG-Orifice-Meter" main.py
+      - name: Nuitka ile doğal kod derleme (${{ matrix.display }})
+        run: >-
+          python -m nuitka --assume-yes-for-downloads
+          --standalone
+          --enable-plugin=tk-inter
+          --output-dir=dist
+          --output-filename="LNG-Orifice-Meter"
+          ${{ matrix.nuitka_extra }}
+          main.py
         shell: bash
-      - name: Paketle (macOS .app → zip)
-        if: runner.os == 'macOS'
-        working-directory: dist
-        run: |
-          zip -r LNG-Orifice-Meter-macOS-arm64.zip "LNG-Orifice-Meter.app"
-          rm -rf "LNG-Orifice-Meter.app"
-      - name: Paketle (Windows .exe)
+      - name: Windows paketle (.exe)
         if: runner.os == 'Windows'
         working-directory: dist
         run: mv "LNG-Orifice-Meter.exe" LNG-Orifice-Meter-windows-x64.exe
+      - name: macOS ad-hoc imza + .app zip
+        if: runner.os == 'macOS'
+        working-directory: dist
+        run: |
+          rm -rf "LNG-Orifice-Meter.dist"
+          codesign --force --deep --sign - "LNG-Orifice-Meter.app"
+          zip -r LNG-Orifice-Meter-macOS-arm64.zip "LNG-Orifice-Meter.app"
+          rm -rf "LNG-Orifice-Meter.app"
       - name: Derleme çıktısı
         uses: actions/upload-artifact@v4
         with:
@@ -89,9 +113,13 @@ jobs:
           body: |
             ## LNG Orifis Ölçüm Noktası Tasarım Aracı — ${{ github.ref_name }}
 
-            **Çapraz platform yapılar:**
-            - `LNG-Orifice-Meter-windows-x64.exe` — Windows 10/11 x64
-            - `LNG-Orifice-Meter-macOS-arm64.zip` — macOS Apple Silicon (M1 Pro / M1 / M2 …)
+            **Çapraz platform yapılar (Nuitka — doğal makine kodu, bootloader yok):**
+            - `LNG-Orifice-Meter-windows-x64.exe` — Windows 10/11 x64 (PE sürüm meta verisi dahil)
+            - `LNG-Orifice-Meter-macOS-arm64.zip` — macOS Apple Silicon (M1 Pro / M1 / M2 …), ad-hoc imzalı .app
+
+            **Güvenlik notu:** Yapılar PyInstaller yerine **Nuitka** ile derlenmiştir (kendi kendine açılan
+            bootloader içermez; antivirüs yanlış pozitif olasılığını önemli ölçüde azaltır). Yine de imzasız
+            indirme oldukları için bazı AV/Gatekeeper uyarıları oluşabilir — README'deki güvenlik bölümüne bakınız.
 
             **Kapsanan modeller:** Peng-Robinson EOS bubble point, Revised Klosek-Zander yoğunluk,
             ISO 5167-2 (tam Reader-Harris/Gallagher flange taps), Newton-Raphson boyutlandırma,
