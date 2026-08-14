@@ -36,6 +36,7 @@ jobs:
         include:
           - os: windows-latest
             artifact: LNG-Orifice-Meter-windows-x64
+            file: LNG-Orifice-Meter-windows-x64.exe
             display: "Windows x64"
             nuitka_extra: >-
               --onefile
@@ -47,6 +48,7 @@ jobs:
               --windows-product-version=1.0.0
           - os: macos-14
             artifact: LNG-Orifice-Meter-macOS-arm64
+            file: LNG-Orifice-Meter-macOS-arm64.zip
             display: "macOS Apple Silicon (arm64)"
             nuitka_extra: >-
               --macos-create-app-bundle
@@ -94,7 +96,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/
+          path: dist/${{ matrix.file }}
 
   release:
     name: GitHub Sürümü Oluştur
