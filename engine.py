@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from thermo_engine import ThermoResult, compute_thermo
 from orifice_engine import SizingResult, size_orifice
 from safety_engine import SafetyResult, check_safety
+from energy_engine import EnergyResult, compute_energy
 
 
 @dataclass
@@ -53,6 +54,7 @@ class RunResult:
     safety: SafetyResult
     sensitivity: list[SensitivityRow] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    energy: EnergyResult | None = None
 
 
 def n2_sensitivity(
@@ -125,6 +127,7 @@ def run_engineering(inp: RunInputs) -> RunResult:
         T1_C=inp.T1_C,
     )
     sens = n2_sensitivity(inp.comp, inp.T1_C, P_abs, safety.phase.P2_barA, thermo.Pv_final_bara)
+    energy = compute_energy(inp.comp, thermo.M_mix, sizing.qm_kg_s)
 
     warnings = list(thermo.warnings) + list(sizing.beta_violations) + list(safety.warnings)
     return RunResult(
@@ -134,4 +137,5 @@ def run_engineering(inp: RunInputs) -> RunResult:
         safety=safety,
         sensitivity=sens,
         warnings=warnings,
+        energy=energy,
     )

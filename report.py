@@ -6,6 +6,7 @@ import html as _html
 from datetime import datetime
 
 from engine import RunResult
+from schematic import build_svg
 
 REFERENCE_NOTES: list[str] = [
     "ISO 5167-2: Orifis plakaları ile akış ölçümü — flange taps konfigürasyonu (Table 3 düz boru gereksinimleri yaklaşıktır; sahaya özel streak/enjektör yerleşimi ayrıca değerlendirilmelidir).",
@@ -13,6 +14,7 @@ REFERENCE_NOTES: list[str] = [
     "Peng-Robinson (PR) durum denklemi: kriyojenik bileşim için bubble point (doymuş buhar basıncı) ve birinci buhar bileşimi.",
     "Revised Klosek-Zander (K-Z) yoğunluk modeli: sıcaklığa bağlı doymuş molar hacimler (Rackett) + MW bağımlı düzeltme sabitleri.",
     "ISA S75.01.01 kavitasyon/flashing kriterleri (F_L sıvı basınç toparlanma faktörü yaklaşımı).",
+    "Isıl değerler bileşen standart molar yanma ısılarından (HHV/NCV, 25 °C / 1 atm) hesaplanır; ön tasarım içindir.",
     "ASME B31.3: minimum et kalınlığı, korozyon payı ve değirmen toleransı kontrolü.",
     "Bu motor ön tasarım ve fizibilite içindir; resmî ölçüm noktası tasarımı, kalibre edilmiş birim ve legal metroloji belirsizlik hesabı gerektirir.",
 ]
@@ -31,6 +33,8 @@ def _badge_class(ok: bool, level: str = "ok") -> str:
 def build_html(r: RunResult, title: str = "LNG Orifis Ölçüm Noktası Tasarım Raporu") -> str:
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
     inp, t, s, sf = r.inputs, r.thermo, r.sizing, r.safety
+    e = r.energy
+    svg = build_svg(inp, r)
 
     comp_rows = "".join(
         f"<tr><td>{_esc(k)}</td><td>{inp.comp.get(k, 0.0)*100:.2f} %</td></tr>"
@@ -100,6 +104,7 @@ def build_html(r: RunResult, title: str = "LNG Orifis Ölçüm Noktası Tasarım
  .card .v {{ font-size: 22px; font-weight:700; }}
  .card .l {{ font-size: 12px; color:#5a6b7a; }}
  .foot {{ margin-top: 24px; font-size: 11px; color:#8a97a5; }}
+ .svgbox {{ background:#fff; border:1px solid #dde3ea; border-radius:8px; padding:8px; }}
 </style></head><body><div class="wrap">
 <h1>🔧 {_esc(title)}</h1>
 <div class="sub">Üretim: {now} &nbsp;|&nbsp; Malzeme: {_esc(material)} &nbsp;|&nbsp; Pv modeli: {_esc(t.pv_model)}</div>
@@ -110,6 +115,9 @@ def build_html(r: RunResult, title: str = "LNG Orifis Ölçüm Noktası Tasarım
  <div class="card"><div class="v">{s.u_flow_pct:.2f} %</div><div class="l">Tahmini akış belirsizliği (±)</div></div>
  <div class="card"><div class="v">{s.rho:.1f} kg/m³</div><div class="l">Çalışma yoğunluğu</div></div>
 </div>
+
+<h2>0. Şematik Gösterim</h2>
+<div class="svgbox">{svg}</div>
 
 <h2>1. Girdi Parametreleri</h2>
 <table class="meta">
@@ -163,7 +171,19 @@ azot, sıvıdaki oranına göre buhar fazında belirgin şekilde zenginleşir; b
 <tr><td>Deşarj katsayısı belirsizliği u(C)/C</td><td>± {s.uC_C_pct:.2f} %</td></tr>
 </table>
 
-<h2>5. Emniyet Denetim Matrisi</h2>
+<h2>5. Enerji (Isıl Değer)</h2>
+<table>
+<tr><th>Parametre</th><th>Değer</th></tr>
+<tr><td>Isıl değer GCV</td><td>{e.GCV_mj_kg:.3f} MJ/kg</td></tr>
+<tr><td>Isıl değer NCV</td><td>{e.NCV_mj_kg:.3f} MJ/kg</td></tr>
+<tr><td>GCV (molar)</td><td>{e.GCV_mj_kmol:.1f} MJ/kmol</td></tr>
+<tr><td>GCV (gaz, ideal Nm³)</td><td>{e.GCV_mj_Nm3:.2f} MJ/Nm³</td></tr>
+<tr><td>NCV (gaz, ideal Nm³)</td><td>{e.NCV_mj_Nm3:.2f} MJ/Nm³</td></tr>
+<tr><td>Termal güç Q×GCV</td><td>{e.MW_mj_s:.1f} MW</td></tr>
+<tr><td>Termal güç Q×NCV</td><td>{e.MW_lv_mj_s:.1f} MW</td></tr>
+</table>
+
+<h2>6. Emniyet Denetim Matrisi</h2>
 <table>
 <tr><th>Parametre</th><th>Değer</th></tr>
 <tr><td>Faz değişimi durumu</td><td>{ph_badge}</td></tr>
@@ -179,7 +199,7 @@ azot, sıvıdaki oranına göre buhar fazında belirgin şekilde zenginleşir; b
 <tr><td>Downstream düz boru</td><td>≥ 5D → {sf.straight_down_m:.2f} m</td></tr>
 </table>
 
-<h2>6. N₂ Duyarlılık Analizi</h2>
+<h2>7. N₂ Duyarlılık Analizi</h2>
 <p class="note">Bubble point başta olmak üzere sonuçlar azot oranına duyarlıdır. Belirlenen P₂ basıncında
 (boru kaybı dahil) N₂ oranı değişiminin etkisi:</p>
 <table>
@@ -187,10 +207,10 @@ azot, sıvıdaki oranına göre buhar fazında belirgin şekilde zenginleşir; b
 {sens_rows}
 </table>
 
-<h2>7. Uyarılar ve Dikkat Notları</h2>
+<h2>8. Uyarılar ve Dikkat Notları</h2>
 <ul>{warn_list}</ul>
 
-<h2>8. Varsayımlar ve Referanslar</h2>
+<h2>9. Varsayımlar ve Referanslar</h2>
 <ul>{note_list}</ul>
 
 <div class="foot">Bu rapor bir ön tasarım hesaplamasıdır; kalibrasyon, montaj ve legal metroloji onayı tasarım paketine dahil edilir.</div>

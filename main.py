@@ -133,6 +133,19 @@ def result_to_dict(r) -> dict:
             "b31_3_uygun": sf.wall.ok,
             "beta_aralik": sf.beta_in_range,
         },
+        "enerji": (
+            {
+                "GCV_MJ_kg": round(e.GCV_mj_kg, 3),
+                "NCV_MJ_kg": round(e.NCV_mj_kg, 3),
+                "GCV_MJ_kmol": round(e.GCV_mj_kmol, 1),
+                "GCV_MJ_Nm3": round(e.GCV_mj_Nm3, 2),
+                "NCV_MJ_Nm3": round(e.NCV_mj_Nm3, 2),
+                "termal_guc_MW_GCV": round(e.MW_mj_s, 2),
+                "termal_guc_MW_NCV": round(e.MW_lv_mj_s, 2),
+            }
+            if (e := r.energy) is not None
+            else None
+        ),
         "uyarilar": r.warnings,
         "n2_duyarlilik": [
             {"n2_pct": row.n2_pct, "pv_barA": round(row.pv_bara, 4), "rho_kg_m3": round(row.rho_kgm3, 1),

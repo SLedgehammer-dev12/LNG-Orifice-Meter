@@ -64,6 +64,12 @@ def main() -> None:
     check("Pv_PR 0.4–2.0 bar-a", 0.4 < t.Pv_pr_bara < 2.0, f"{t.Pv_pr_bara:.4f}")
     check("M_mix 16.5–18.6", 16.5 < t.M_mix < 18.6, f"{t.M_mix:.3f}")
 
+    print("\n-- Isıl değer (enerji motoru) --")
+    check("GCV 48–56 MJ/kg (LNG)", 48.0 < r.energy.GCV_mj_kg < 56.0, f"{r.energy.GCV_mj_kg:.3f}")
+    check("NCV < GCV", r.energy.NCV_mj_kg < r.energy.GCV_mj_kg)
+    check("GCV kansistent MJ/kmol", abs(r.energy.GCV_mj_kmol - r.energy.GCV_mj_kg * t.M_mix) < 1e-6)
+    check("termal güç > 0", r.energy.MW_mj_s > 0)
+
     print("\n-- Hidrolik --")
     check("β 0.35–0.55", 0.35 < s.beta < 0.55, f"{s.beta:.4f}")
     check("C 0.59–0.61", 0.59 < s.C < 0.61, f"{s.C:.5f}")
@@ -112,10 +118,12 @@ def main() -> None:
         with open(path, encoding="utf-8") as fh:
             content = fh.read()
         check("HTML utf-8 + Türkçe", "Türkçe" in content or "UYGUN" in content)
+        check("SVG şema gömülü", "<svg" in content and ">0. Şematik Gösterim</h2>" in content)
+        check("Enerji bölümü", "Isıl değer GCV" in content)
 
     print("\n-- GUI veri yapısı (Tk gerektirmez) --")
     sections = build_sections(r)
-    check("5 bölüm üretir", len(sections) >= 4, str(len(sections)))
+    check("5 bölüm üretir", len(sections) >= 5, str(len(sections)))
     check("termo bölümü dolu", len(sections[0][1]) >= 5)
 
     print("\n-- Güncelleme modülü (ağ gerektirmez) --")
