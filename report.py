@@ -73,9 +73,11 @@ def build_html(r: RunResult, title: str = "LNG Orifis Ölçüm Noktası Tasarım
 
     material = inp.material
     wall_rows = (
+        f"<tr><td>Tanımlanan boru (B36.19M)</td><td>{_esc(sf.wall.identified_pipe)}</td></tr>"
         f"<tr><td>Hesap kalınlığı t_hesap (B31.3)</td><td>{sf.wall.t_calc_mm:.2f} mm</td></tr>"
         f"<tr><td>Gerekli kalınlık (t+korozyon {inp.c_mm:.1f})</td><td>{sf.wall.t_required_mm:.2f} mm</td></tr>"
         f"<tr><td>Mevcut (değirmen toleransı sonrası)</td><td>{sf.wall.t_available_mm:.2f} mm</td></tr>"
+        f"<tr><td>Önerilen min. standart</td><td><b>{_esc(sf.wall.recommended_schedule)}</b></td></tr>"
         f"<tr><td>Durum</td><td>{wall_badge} {'– '.join(sf.wall.notes)}</td></tr>"
     )
 
@@ -167,6 +169,8 @@ azot, sıvıdaki oranına göre buhar fazında belirgin şekilde zenginleşir; b
 <tr><td>ΔP nominal</td><td>{inp.dP_target_mbar:.0f} mbar ({s.dP_nom_pa:.0f} Pa)</td></tr>
 <tr><td>ΔP @ Qmax (%{inp.q_max_ratio*100:.0f})</td><td>{s.dP_max_mbar:.1f} mbar</td></tr>
 <tr><td>ΔP @ Qmin (%{inp.q_min_ratio*100:.0f})</td><td>{s.dP_min_mbar:.1f} mbar</td></tr>
+<tr><td>Kalıcı basınç kaybı Δϖ (ISO 5167)</td><td>{s.dP_perm_loss_mbar:.1f} mbar</td></tr>
+<tr><td>Pompalama güç kaybı</td><td>{s.pump_power_loss_kw:.2f} kW</td></tr>
 <tr><td>Akış belirsizliği u(q)/q (k=2 tahmini)</td><td>± {s.u_flow_pct:.2f} %</td></tr>
 <tr><td>Deşarj katsayısı belirsizliği u(C)/C</td><td>± {s.uC_C_pct:.2f} %</td></tr>
 </table>
@@ -232,9 +236,13 @@ def print_console_summary(r: RunResult) -> None:
     print(f"  Re_D             : {s.Re_D:9,.0f}")
     print(f"  d₂₀ (imalat)     : {s.d20_mm:9.3f} mm   (soğuk dT = {s.dT_mm:.3f} mm)")
     print(f"  ΔP max/min       : {s.dP_max_mbar:9.1f} / {s.dP_min_mbar:6.1f} mbar")
+    print(f"  Kalıcı Δϖ / Güç  : {s.dP_perm_loss_mbar:9.1f} mbar / {s.pump_power_loss_kw:.2f} kW")
     print(f"  u(q)/q           : {s.u_flow_pct:9.2f} %  (uC/C = {s.uC_C_pct:.2f} %)")
     print(f"  Faz durumu       : {sf.phase.status}")
-    print(f"  B31.3            : " + ("UYGUN" if sf.wall.ok else "YETERSİZ / GİRİLMEDİ"))
+    b31_txt = "UYGUN" if sf.wall.ok else "YETERSİZ / GİRİLMEDİ"
+    if sf.wall.identified_pipe != "–":
+        b31_txt += f" ({sf.wall.identified_pipe} -> Öneri: {sf.wall.recommended_schedule})"
+    print(f"  B31.3            : {b31_txt}")
     print(line)
     for w in r.warnings:
         print(f"  [!] {w}")

@@ -72,7 +72,7 @@ ADV_DEFS: list[tuple[str, str, str, str]] = [
 FIELD_CATS = {key: cat for key, _, cat, _, _ in FIELD_DEFS}
 ADV_CATS = {key: "percent" for key, _, _, _ in ADV_DEFS}
 RESULT_CATS = ("pressure", "diameter", "length", "dp", "velocity", "density",
-               "heating_value", "energy_flow", "mass_flow", "molar_mass", "flow")
+               "heating_value", "energy_flow", "power", "mass_flow", "molar_mass", "flow")
 
 
 class ToolTip:

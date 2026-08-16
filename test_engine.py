@@ -77,23 +77,48 @@ def main() -> None:
     check("d20 125–145 mm", 125 < s.d20_mm < 145, f"{s.d20_mm:.2f}")
     check("hız 1–3 m/s", 1.0 < s.velocity_m_s < 3.0, f"{s.velocity_m_s:.3f}")
 
-    print("\n-- Belirsizlik --")
+    print("\n-- Belirsizlik ve Kalıcı Basınç Kaybı --")
     check("u(q)/q < 1.2 %", s.u_flow_pct < 1.2, f"{s.u_flow_pct:.3f} %")
+    check("kalıcı dP > 0 ve < dP_nom", 0.0 < s.dP_perm_loss_mbar < 250.0, f"{s.dP_perm_loss_mbar:.1f} mbar")
+    check("pompa güç kaybı > 0", s.pump_power_loss_kw > 0.0, f"{s.pump_power_loss_kw:.2f} kW")
 
-    print("\n-- Emniyet --")
+    print("\n-- Emniyet ve ASME B36.19M Boru Normu --")
     check("faz güvenli (flashing yok)", not sf.phase.flashing, sf.phase.status)
     check("kavitasyon yok", not sf.phase.cavitation, sf.phase.status)
     check("P2 > Pv (10x marj)", sf.phase.margin_P2_over_Pv > 5.0, f"{sf.phase.margin_P2_over_Pv:.2f}")
     check("B31.3 uygun", sf.wall.ok, str(sf.wall.notes))
+    check("Boru tanımlandı (NPS 12 Sch 40S)", "NPS 12" in sf.wall.identified_pipe and "40S" in sf.wall.identified_pipe, sf.wall.identified_pipe)
+    check("Önerilen schedule mevcut", "Sch" in sf.wall.recommended_schedule, sf.wall.recommended_schedule)
     check("β aralıkta", sf.beta_in_range)
     check("boru kaybı < 100 mbar", sf.phase.dP_pipe_bar * 1000 < 100, f"{sf.phase.dP_pipe_bar*1000:.1f} mbar")
 
-    print("\n-- Bileşim normalizasyon uyarısı --")
+    print("\n-- ISO 5167-2 Küçük Çap (D < 71.12 mm) R-H/G Testi --")
+    from orifice_engine import rhg_flange_C
+    c_small = rhg_flange_C(beta=0.50, Re_D=2e5, D_mm=50.0)
+    check("D=50mm C fiziksel (0.59-0.62)", 0.59 < c_small < 0.62, f"{c_small:.5f}")
+
+    print("\n-- ASME B36.19M / B36.10M Kütüphane Testleri (NPS 36'ya kadar) --")
+    from safety_engine import identify_pipe, recommend_schedule
+    label_12, sch_12 = identify_pipe(323.85, 9.53)
+    check("323.85 / 9.53 -> NPS 12 Sch 40S", "NPS 12" in label_12 and sch_12 in ("40S", "STD"), label_12)
+    rec_lbl_5s, rec_t_5s = recommend_schedule(323.85, t_required_mm=2.5)
+    check("t_req=2.5mm için Sch 5S önerir", "5S" in rec_lbl_5s, f"{rec_lbl_5s} (t={rec_t_5s}mm)")
+    rec_lbl_10s, rec_t_10s = recommend_schedule(323.85, t_required_mm=3.6)
+    check("t_req=3.6mm için Sch 10S önerir", "10S" in rec_lbl_10s, f"{rec_lbl_10s} (t={rec_t_10s}mm)")
+
+    # NPS 36" (914.4 mm) ve harfli/mm testleri
+    label_36, sch_36 = identify_pipe(914.40, 12.70)
+    check("914.40 / 12.70 -> NPS 36 XS", "NPS 36" in label_36 and (sch_36 == "XS" or "12.70" in label_36), label_36)
+    rec_36, t_36 = recommend_schedule(914.40, t_required_mm=6.5)
+    check("NPS 36 t_req=6.5mm öneri", "NPS 36" in rec_36 and t_36 >= 7.0, f"{rec_36} (t={t_36}mm)")
+
+    print("\n-- GIIGNL K-Z ve Termo Testleri --")
     nasty = dict(BOTAŞ_COMP)
-    nasty["N2"] = 0.010
+    nasty["N2"] = 0.050  # > 4.25% GIIGNL limiti aşımı
     r2 = run_engineering(RunInputs(comp=nasty, T1_C=-163.0, P1_barg=8.5, D20_mm=300.0,
                                    qm_nom_ton_h=150.0, dP_target_mbar=250.0))
-    check("tutar >1e-3 uyarı üretir", any("normalize" in w for w in r2.warnings))
+    check("GIIGNL N2 limit aşımı uyarısı", any("GIIGNL" in w and "N2" in w for w in r2.warnings))
+    check("Dinamik viskozite hesaplandı (>0)", t.viscosity_pa_s > 0, f"{t.viscosity_pa_s:.6f} Pa.s")
 
     print("\n-- B31.3 atlanır (girdi yok) --")
     r3 = run_engineering(RunInputs(comp=BOTAŞ_COMP, T1_C=-163.0, P1_barg=8.5, D20_mm=300.0,
@@ -120,6 +145,7 @@ def main() -> None:
         check("HTML utf-8 + Türkçe", "Türkçe" in content or "UYGUN" in content)
         check("SVG şema gömülü", "<svg" in content and ">0. Şematik Gösterim</h2>" in content)
         check("Enerji bölümü", "Isıl değer GCV" in content)
+        check("Kalıcı basınç kaybı HTML'de", "Kalıcı basınç kaybı" in content)
 
     print("\n-- GUI veri yapısı (Tk gerektirmez) --")
     sections = build_sections(r)

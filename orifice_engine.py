@@ -27,8 +27,9 @@ def rhg_flange_C(beta: float, Re_D: float, D_mm: float) -> float:
         + 0.080 * math.exp(-10.0 * L1)
         - 0.123 * math.exp(-7.0 * L1)
     ) * (1.0 - 0.11 * A) * beta ** 4 / (1.0 - beta ** 4)
+    small_D_term = 0.0
     if D_mm < 71.12:
-        term5 *= D_mm / 25.4
+        small_D_term = 0.011 * (0.75 - beta) * (2.8 - D_mm / 25.4)
     term6 = -0.031 * (M2 - 0.8 * M2 ** 1.1) * beta ** 1.3
     return (
         0.5961
@@ -38,6 +39,7 @@ def rhg_flange_C(beta: float, Re_D: float, D_mm: float) -> float:
         + term4
         + term5
         + term6
+        + small_D_term
     )
 
 
@@ -155,6 +157,20 @@ def flow_uncertainty(
     return math.sqrt(term_c + term_d + term_dd + term_dp + term_rho)
 
 
+def iso5167_permanent_pressure_loss_ratio(beta: float, C: float) -> float:
+    """ISO 5167-2:2003 Clause 5.4 kalıcı basınç kaybı oranı Delta_p_loss / Delta_p."""
+    b4 = beta ** 4
+    c2 = C ** 2
+    term = 1.0 - b4 * (1.0 - c2)
+    sq = math.sqrt(max(term, 0.0))
+    cb2 = C * (beta ** 2)
+    num = sq - cb2
+    den = sq + cb2
+    if den <= 0:
+        return max(0.0, min(1.0, (1.0 - beta ** 1.9) / (1.0 + beta ** 1.9)))
+    return max(0.0, min(1.0, num / den))
+
+
 @dataclass
 class SizingResult:
     rho: float
@@ -173,6 +189,8 @@ class SizingResult:
     dP_nom_pa: float
     dP_max_mbar: float
     dP_min_mbar: float
+    dP_perm_loss_mbar: float
+    pump_power_loss_kw: float
     viscosity_pa_s: float
     alpha_1K: float
     u_flow_pct: float
@@ -222,6 +240,13 @@ def size_orifice(
     dP_max_mbar = dP_target_mbar * q_max_ratio ** 2
     dP_min_mbar = dP_target_mbar * q_min_ratio ** 2
 
+    loss_ratio = iso5167_permanent_pressure_loss_ratio(sol.beta, sol.C)
+    dP_perm_loss_mbar = dP_target_mbar * loss_ratio
+    dP_perm_loss_pa = dP_perm_loss_mbar * 100.0
+    # Pompalama güç kaybı: Q_vol (m3/s) * Delta_P_loss (Pa) / 1000 (kW)
+    qv_m3_s = qm_kg_s / rho if rho > 0 else 0.0
+    pump_power_loss_kw = (qv_m3_s * dP_perm_loss_pa) / 1000.0
+
     uC_eff = max(rhg_C_uncertainty(sol.beta, Re_D), uC_C)
     u_flow = flow_uncertainty(sol.beta, sol.C, uC_eff, uD_D, ud_d, udP_dP, urho_rho)
 
@@ -243,6 +268,8 @@ def size_orifice(
             dP_nom_pa=dP_nom_pa,
             dP_max_mbar=dP_max_mbar,
             dP_min_mbar=dP_min_mbar,
+            dP_perm_loss_mbar=dP_perm_loss_mbar,
+            pump_power_loss_kw=pump_power_loss_kw,
             viscosity_pa_s=viscosity_pa_s,
             alpha_1K=alpha_1K,
             u_flow_pct=u_flow * 100.0,

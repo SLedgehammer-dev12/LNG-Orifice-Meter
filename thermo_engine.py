@@ -62,7 +62,7 @@ VCRIT_M3_KMOL: dict[str, float] = {
     "N2": 0.0894,
 }
 
-ANTONIE: dict[str, tuple[float, float, float]] = {
+ANTOINE: dict[str, tuple[float, float, float]] = {
     "CH4": (3.9895, 443.013, -0.49),
     "C2H6": (4.0932, 687.165, -12.11),
     "C3H8": (4.0583, 808.921, -25.26),
@@ -100,7 +100,21 @@ KZ_TABLE: list[tuple[float, float, float]] = [
 R_GAS: float = 0.08314466
 LIQUID_COMPRESS_1_PER_BAR: float = 2.2e-4
 VISCOSITY_DEFAULT_PA_S: float = 0.00012
-ANTONIE_NBP_WARNING_BELOW_K: float = 160.0
+ANTOINE_NBP_WARNING_BELOW_K: float = 160.0
+
+
+def lng_liquid_viscosity_pa_s(T_K: float, M_mix: float) -> float:
+    """Kriyojenik LNG sıvısı dinamik viskozitesi (Pa.s).
+
+    Referans: Doymuş hidrokarbon kriyojenik sıvı korelasyonu (NIST / Lee-Gonzales temelli).
+    110.15 K (-163 °C) ve M_mix=17.8 kg/kmol için ~0.00012 Pa.s (0.12 cP) üretir.
+    """
+    if T_K <= 0.0:
+        return VISCOSITY_DEFAULT_PA_S
+    ratio_t = 110.15 / max(T_K, 80.0)
+    base_mu = 1.18e-4 * (ratio_t ** 1.85)
+    mw_corr = 1.0 + 0.038 * max(M_mix - 16.043, 0.0)
+    return base_mu * mw_corr
 
 
 class ThermoError(ValueError):
@@ -128,7 +142,7 @@ def molar_mass(comp: dict[str, float]) -> float:
 
 
 def antoine_psat(c: str, T_K: float) -> float:
-    a, b, cc = ANTONIE[c]
+    a, b, cc = ANTOINE[c]
     return 10.0 ** (a - b / (T_K + cc))
 
 
@@ -295,11 +309,12 @@ class ThermoResult:
     first_vapor_y: dict[str, float]
     pr_converged: bool
     T_K: float
+    viscosity_pa_s: float
     warnings: list[str] = field(default_factory=list)
 
 
 def compute_thermo(
-    comp: dict[str, float], T1_C: float, P_abs_bara: float, viscosity_pa_s: float = VISCOSITY_DEFAULT_PA_S
+    comp: dict[str, float], T1_C: float, P_abs_bara: float, viscosity_pa_s: float | None = None
 ) -> ThermoResult:
     comp_n, warn = normalize_composition(comp)
     T_K = T1_C + 273.15
@@ -310,7 +325,21 @@ def compute_thermo(
     pv_ra = raoult_bubble(comp_n, T_K)
 
     warnings = list(warn)
-    if T_K < ANTONIE_NBP_WARNING_BELOW_K:
+    # GIIGNL K-Z korelasyon geçerlilik sınırları
+    if T_K > 115.0:
+        warnings.append(
+            f"Çalışma sıcaklığı ({T1_C:.1f} °C / {T_K:.1f} K) GIIGNL Klosek-Zander geçerlilik üst sınırının (115 K) üzerinde."
+        )
+    if comp_n.get("N2", 0.0) > 0.0425:
+        warnings.append(
+            f"N2 mol kesri (%{comp_n['N2']*100:.2f}) GIIGNL Klosek-Zander üst sınırının (%4.25) üzerinde."
+        )
+    if comp_n.get("CH4", 0.0) < 0.60:
+        warnings.append(
+            f"CH4 mol kesri (%{comp_n['CH4']*100:.2f}) GIIGNL Klosek-Zander alt sınırının (%60) altında."
+        )
+
+    if T_K < ANTOINE_NBP_WARNING_BELOW_K:
         warnings.append(
             f"Çalışma sıcaklığı ({T1_C:.1f} °C) bileşenlerin normal kaynama noktalarının çok altında; "
             "Antoine/Raoult değerleri ekstrapolasyon içerir, birincil sonuç Peng-Robinson modelidir."
@@ -328,6 +357,8 @@ def compute_thermo(
     else:
         pv_final, pv_model = pv_ra, "Raoult (yedeği)"
 
+    mu_eff = viscosity_pa_s if viscosity_pa_s is not None else lng_liquid_viscosity_pa_s(T_K, M_mix)
+
     return ThermoResult(
         M_mix=M_mix,
         rho_sat_kgm3=rho_sat,
@@ -339,5 +370,6 @@ def compute_thermo(
         first_vapor_y=y_pr if conv else {},
         pr_converged=conv,
         T_K=T_K,
+        viscosity_pa_s=mu_eff,
         warnings=warnings,
     )

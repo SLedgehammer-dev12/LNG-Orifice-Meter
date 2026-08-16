@@ -101,6 +101,37 @@ def build_svg(inp, r, pal: dict | None = None) -> str:
             el.append(f'<text x="{rx}" y="{y1-34}" font-size="9" fill="{pal["text_muted"]}">{_esc(name)}</text>')
             el.append(f'<text x="{rx}" y="{y1-22}" font-size="10" fill="{pal["text"]}">{_esc(val)}</text>')
             rx += 84
+        # Basınç profili eğrisi (P1 -> Pvc -> P2 ve Pv çizgisi)
+        p1_bar = inp.P1_barg + 1.01325 if inp else sf.phase.P2_barA + s.dP_nom_pa/1e5
+        p2_bar = sf.phase.P2_barA
+        pvc_bar = sf.phase.Pvc_barA
+        pv_bar = sf.phase.Pv_barA
+
+        # Normalize yükseklikler (y1 + 40 ile H - 35 arası)
+        plot_y0 = y1 + 35
+        plot_h = 35.0
+        p_max = max(p1_bar, pv_bar * 1.2, 0.1)
+        p_min = max(0.0, min(pvc_bar, pv_bar) * 0.8)
+        p_range = max(p_max - p_min, 0.1)
+
+        def _p_to_y(p_val: float) -> float:
+            norm = (p_val - p_min) / p_range
+            return plot_y0 + plot_h - norm * plot_h
+
+        y_p1 = _p_to_y(p1_bar)
+        y_pvc = _p_to_y(pvc_bar)
+        y_p2 = _p_to_y(p2_bar)
+        y_pv = _p_to_y(pv_bar)
+
+        # Pv çizgisi (kesikli kırmızı)
+        el.append(f'<line x1="{x0}" y1="{y_pv}" x2="{x1}" y2="{y_pv}" stroke="{pal["error"]}" stroke-dasharray="2,2" stroke-width="1"/>')
+        el.append(f'<text x="{x1-4}" y="{y_pv-2}" font-size="8" fill="{pal["error"]}" text-anchor="end">Pv={pv_bar:.2f}</text>')
+
+        # P(x) eğrisi
+        path_d = f"M {x0} {y_p1} L {px-18} {y_p1} Q {px} {y_pvc} {px+18} {y_p2} L {x1} {y_p2}"
+        el.append(f'<path d="{path_d}" fill="none" stroke="{pal["flow"]}" stroke-width="2"/>')
+        el.append(f'<text x="{x0+4}" y="{y_p1-3}" font-size="8" fill="{pal["flow"]}">P(x) Profili</text>')
+
         # durum
         if sf.phase.flashing:
             status, scol = "FLASHING", pal["error"]
@@ -115,10 +146,10 @@ def build_svg(inp, r, pal: dict | None = None) -> str:
                   f'fill="#ffffff" text-anchor="middle">{status}</text>')
         el.append(f'<text x="{x0}" y="{H-16}" font-size="9" fill="{pal["dimension"]}">'
                   f'β={s.beta:.3f}  C={s.C:.4f}  Re={s.Re_D:,.0f}  d₂₀={s.d20_mm:.1f} mm  '
-                  f'ΔPₙₒₘ={s.dP_nom_pa/100:.0f} mbar</text>')
+                  f'ΔPₙₒₘ={s.dP_nom_pa/100:.0f} mbar  Δϖ={s.dP_perm_loss_mbar:.1f} mbar</text>')
         if e is not None:
             el.append(f'<text x="{x0}" y="{H-5}" font-size="9" fill="{pal["dimension"]}">'
-                      f'GCV={e.GCV_mj_kg:.2f} MJ/kg   Q×GCV={e.MW_mj_s:.1f} MW</text>')
+                      f'GCV={e.GCV_mj_kg:.2f} MJ/kg   Q×GCV={e.MW_mj_s:.1f} MW   Pompa Kaybı={s.pump_power_loss_kw:.2f} kW</text>')
 
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
             'width="100%" height="auto" role="img" aria-label="LNG orifis ölçüm noktası şeması">'
@@ -261,6 +292,38 @@ def draw(cv, inp, r, pal: dict | None = None, units: dict[str, str] | None = Non
             cv.create_text(rxx, y1 - 22, text=val, font=FONT_SM, fill=pal["text"], anchor="w")
             rxx += 78
 
+        # Basınç profili eğrisi (P1 -> Pvc -> P2 ve Pv çizgisi)
+        p1_bar = (inp.P1_barg + 1.01325) if inp is not None else (sf.phase.P2_barA + s.dP_nom_pa / 1e5)
+        p2_bar = sf.phase.P2_barA
+        pvc_bar = sf.phase.Pvc_barA
+        pv_bar = sf.phase.Pv_barA
+
+        plot_y0 = y1 + 35
+        plot_h = 32.0
+        p_max = max(p1_bar, pv_bar * 1.2, 0.1)
+        p_min = max(0.0, min(pvc_bar, pv_bar) * 0.8)
+        p_range = max(p_max - p_min, 0.1)
+
+        def _p_to_y(p_val: float) -> float:
+            norm = (p_val - p_min) / p_range
+            return plot_y0 + plot_h - norm * plot_h
+
+        y_p1 = _p_to_y(p1_bar)
+        y_pvc = _p_to_y(pvc_bar)
+        y_p2 = _p_to_y(p2_bar)
+        y_pv = _p_to_y(pv_bar)
+
+        # Pv çizgisi (kesikli)
+        cv.create_line(x0, y_pv, x1, y_pv, fill=pal["error"], dash=(2, 2))
+        cv.create_text(x1 - 4, y_pv - 6, text=f"Pv={pv_bar:.2f}", font=FONT_SM, fill=pal["error"], anchor="e")
+
+        # P(x) eğrisi
+        cv.create_line(x0, y_p1, px - 18, y_p1, fill=pal["flow"], width=2)
+        cv.create_line(px - 18, y_p1, px, y_pvc, fill=pal["flow"], width=2)
+        cv.create_line(px, y_pvc, px + 18, y_p2, fill=pal["flow"], width=2)
+        cv.create_line(px + 18, y_p2, x1, y_p2, fill=pal["flow"], width=2)
+        cv.create_text(x0 + 4, y_p1 - 6, text="P(x) Basınç Profili", font=FONT_SM, fill=pal["flow"], anchor="w")
+
         # Durum çipleri (üst sağ)
         cx, cy = x1, y0 - 40
         if sf.phase.flashing:
@@ -278,12 +341,15 @@ def draw(cv, inp, r, pal: dict | None = None, units: dict[str, str] | None = Non
             cx = _chip(cv, cx - 10, cy, "B31.3", pal["error"], "#ffffff") - 8
 
         # Alt bilgi satırı
+        uPow = units.get("power", "kW")
         line1 = (f"β={s.beta:.3f}  C={s.C:.4f}  Re={s.Re_D:,.0f}  "
-                 f"d₂₀={_fmt(s.d20_mm, 'diameter', uD)}  ΔPₙₒₘ={_fmt(s.dP_nom_pa / 100.0, 'dp', uL)}")
+                 f"d₂₀={_fmt(s.d20_mm, 'diameter', uD)}  ΔPₙₒₘ={_fmt(s.dP_nom_pa / 100.0, 'dp', uL)}  "
+                 f"Δϖ={_fmt(s.dP_perm_loss_mbar, 'dp', uL)}")
         cv.create_text(x0, H - 18, text=line1, font=FONT_SM, fill=pal["dimension"], anchor="w")
         if e is not None:
             line2 = (f"GCV={_fmt(e.GCV_mj_kg, 'heating_value', units.get('heating_value', 'MJ/kg'))}  "
-                     f"Q×GCV={_fmt(e.MW_mj_s, 'energy_flow', units.get('energy_flow', 'MW'))}")
+                     f"Q×GCV={_fmt(e.MW_mj_s, 'energy_flow', units.get('energy_flow', 'MW'))}  "
+                     f"Pompa Kaybı={_fmt(s.pump_power_loss_kw, 'power', uPow)}")
             cv.create_text(x0, H - 6, text=line2, font=FONT_SM, fill=pal["dimension"], anchor="w")
     else:
         cv.create_text(px, y1 + 42, text="Sonuç yok — 'Hesapla' düğmesiyle hesap çalıştırın.",

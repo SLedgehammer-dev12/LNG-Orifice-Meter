@@ -257,6 +257,14 @@ _MOLAR_MASS: dict[str, UnitDef] = {
     "lb/lbmol": _linear("lb/lbmol", 1.0, 0.0),
 }
 
+# --- Güç / pompa kaybı (kanonik: kW) ----------------------------------------
+_POWER: dict[str, UnitDef] = {
+    "kW": _linear("kW", 1.0, 0.0),
+    "W": _linear("W", 1.0 / 1000.0, 0.0),
+    "MW": _linear("MW", 1000.0, 0.0),
+    "hp": _linear("hp", 0.745699872, 0.0),
+}
+
 # --- Yüzde / kesir (kanonik: kesir) -------------------------------------------
 _PERCENT: dict[str, UnitDef] = {
     "%": _linear("%", 1.0 / 100.0, 0.0),
@@ -275,6 +283,7 @@ CATALOG: dict[str, dict[str, UnitDef]] = {
     "mass_flow": _MASS_FLOW,
     "flow": _FLOW,
     "energy_flow": _ENERGY_FLOW,
+    "power": _POWER,
     "dp": _DP,
     "density": _DENSITY,
     "velocity": _VELOCITY,
@@ -293,6 +302,7 @@ CANONICAL_UNIT: dict[str, str] = {
     "mass_flow": "t/h",
     "flow": "t/h",
     "energy_flow": "MW",
+    "power": "kW",
     "dp": "mbar",
     "density": "kg/m³",
     "velocity": "m/s",
@@ -312,6 +322,7 @@ PRESETS: dict[str, dict[str, str]] = {
         "flow": "t/h",
         "mass_flow": "t/h",
         "energy_flow": "MW",
+        "power": "kW",
         "dp": "mbar",
         "density": "kg/m³",
         "velocity": "m/s",
@@ -326,6 +337,7 @@ PRESETS: dict[str, dict[str, str]] = {
         "flow": "lb/h",
         "mass_flow": "lb/h",
         "energy_flow": "MMBtu/h",
+        "power": "hp",
         "dp": "psi",
         "density": "lb/ft³",
         "velocity": "ft/s",
@@ -378,6 +390,7 @@ DIGITS: dict[str, int] = {
     "length": 2,
     "mass_flow": 2,
     "energy_flow": 3,
+    "power": 2,
     "dp": 1,
     "density": 2,
     "velocity": 3,
@@ -461,6 +474,7 @@ def verify_conversions(ctx: dict | None = None) -> list[str]:
     errs += _ref_check("1 Btu/lb -> MJ/kg", to_canonical(1.0, "Btu/lb", "heating_value"), 0.002326)
     errs += _ref_check("1 kWh/kg -> MJ/kg", to_canonical(1.0, "kWh/kg", "heating_value"), 3.6)
     errs += _ref_check("1 MMBtu/h -> MW", to_canonical(1.0, "MMBtu/h", "energy_flow"), 0.2930710702, 1e-4)
+    errs += _ref_check("1 hp -> kW", to_canonical(1.0, "hp", "power"), 0.745699872, 1e-6)
     errs += _ref_check("1 atm -> bar-a", to_canonical(1.0, "atm", "pressure"), 1.01325)
 
     # Çapraz yol tutarlılığı: 250 mbar -> Pa -> psi -> mbar aynı değere dönmeli

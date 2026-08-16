@@ -71,6 +71,8 @@ def build_catalog(r) -> list[tuple[str, list[ResultRow]]]:
         ResultRow("ΔP nominal", s.dP_nom_pa / 100.0, "dp", digits=0),   # Pa -> mbar
         ResultRow("ΔP @ Qmax", s.dP_max_mbar, "dp"),
         ResultRow("ΔP @ Qmin", s.dP_min_mbar, "dp"),
+        ResultRow("Kalıcı basınç kaybı Δϖ (ISO 5167)", s.dP_perm_loss_mbar, "dp", digits=1),
+        ResultRow("Pompalama güç kaybı", s.pump_power_loss_kw, "power", digits=2),
         ResultRow("Akış belirsizliği u(q)/q", s.u_flow_pct / 100.0, "percent", prefix="± ", digits=2),
         ResultRow("Deşarj katsayısı belirsizliği u(C)/C", s.uC_C_pct / 100.0, "percent", prefix="± ", digits=2),
     ]
@@ -113,8 +115,10 @@ def build_catalog(r) -> list[tuple[str, list[ResultRow]]]:
         rows.append(ResultRow("ASME B31.3 et kalınlığı", "YETERSİZ", tag="bad"))
     if not str(sf.wall.t_actual_mm) == "nan":
         rows += [
+            ResultRow("  Tanımlanan boru (B36.19M)", sf.wall.identified_pipe),
             ResultRow("  t_hesap → t_gerekli", f"{sf.wall.t_calc_mm:.2f} → {sf.wall.t_required_mm:.2f} mm"),
             ResultRow("  t_mevcut (değirmen tol.)", sf.wall.t_available_mm, "diameter"),
+            ResultRow("  Önerilen min. standart", sf.wall.recommended_schedule, tag="emph"),
         ]
     rows += [
         ResultRow("Upstream düz boru (≥20D)", sf.straight_up_m, "length"),

@@ -64,6 +64,9 @@ def main() -> None:
     check("US debi lb/h", default_unit("mass_flow", "US") == "lb/h")
     check("SI ΔP mbar", default_unit("dp", "SI") == "mbar")
     check("US ΔP psi", default_unit("dp", "US") == "psi")
+    check("SI Güç kW", default_unit("power", "SI") == "kW")
+    check("US Güç hp", default_unit("power", "US") == "hp")
+    check("10 kW -> hp", abs(from_canonical(10.0, "hp", "power") - 10.0 / 0.745699872) < 1e-4)
 
     print("\n-- Formatlama --")
     s = from_canonical(300.0, "in", "diameter")

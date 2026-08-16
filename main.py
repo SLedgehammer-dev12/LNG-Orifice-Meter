@@ -121,6 +121,8 @@ def result_to_dict(r) -> dict:
             "dP_nom_Pa": round(s.dP_nom_pa, 0),
             "dP_max_mbar": round(s.dP_max_mbar, 1),
             "dP_min_mbar": round(s.dP_min_mbar, 1),
+            "dP_perm_loss_mbar": round(s.dP_perm_loss_mbar, 1),
+            "pompa_guc_kaybi_kW": round(s.pump_power_loss_kw, 2),
             "u_q_q_pct": round(s.u_flow_pct, 2),
         },
         "emniyet": {
@@ -130,6 +132,8 @@ def result_to_dict(r) -> dict:
             "Pv_barA": round(sf.phase.Pv_barA, 4),
             "boru_kaybi_mbar": round(sf.phase.dP_pipe_bar * 1000, 1),
             "marj_P2_Pv": round(sf.phase.margin_P2_over_Pv, 2),
+            "tanimlanan_boru_B36_19M": sf.wall.identified_pipe,
+            "onerilen_schedule": sf.wall.recommended_schedule,
             "b31_3_uygun": sf.wall.ok,
             "beta_aralik": sf.beta_in_range,
         },
