@@ -17,7 +17,7 @@ API_URL = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASE_URL = f"https://github.com/{REPO}/releases/latest"
 
 APP_NAME = "LNG Orifice Meter"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 CHECK_TIMEOUT = 10
 DOWNLOAD_TIMEOUT = 180

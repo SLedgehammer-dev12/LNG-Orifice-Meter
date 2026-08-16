@@ -43,21 +43,25 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 def main() -> None:
+    # [MÜHENDİSLİK DÜZELTMESİ v1.3.0]: D20_mm verilmez; Do_mm ve t_actual_mm'den otomatik türetilir
     inp = RunInputs(
         comp=BOTAŞ_COMP,
         T1_C=-163.0,
         P1_barg=8.5,
-        D20_mm=300.0,
         qm_nom_ton_h=150.0,
         dP_target_mbar=250.0,
         q_min_ratio=0.30,
         q_max_ratio=1.20,
         L_pipe_m=50.0,
-        Do_mm=323.9,
+        Do_mm=323.85,
         t_actual_mm=9.53,
     )
     r = run_engineering(inp)
     s, t, sf = r.sizing, r.thermo, r.safety
+
+    print("\n-- Geometrik Tutarlılık ve Otomatik İç Çap (v1.3.0) --")
+    expected_d20 = 323.85 - 2.0 * 9.53  # 304.79 mm
+    check("D20 otomatik hesaplandı (OD - 2t)", abs(inp.D20_mm - expected_d20) < 1e-4, f"D20 = {inp.D20_mm:.3f} mm")
 
     print("\n-- Fiziksel sağduyu --")
     check("yoğunluk 420–480 kg/m³", 420 < t.rho_oper_kgm3 < 480, f"{t.rho_oper_kgm3:.2f}")

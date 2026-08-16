@@ -15,9 +15,9 @@ class RunInputs:
     comp: dict[str, float]
     T1_C: float
     P1_barg: float
-    D20_mm: float
     qm_nom_ton_h: float
     dP_target_mbar: float
+    D20_mm: float = 0.0
     q_min_ratio: float = 0.30
     q_max_ratio: float = 1.20
     viscosity_pa_s: float = 0.00012
@@ -35,6 +35,23 @@ class RunInputs:
     ud_d: float = 0.0005
     udP_dP: float = 0.005
     urho_rho: float = 0.001
+
+    def __post_init__(self) -> None:
+        """[MÜHENDİSLİK DÜZELTMESİ v1.3.0]: Geometrik Tutarlılık İlkesi.
+        
+        Kullanıcının iç çapı ayrıca elle girmesine gerek kalmadan;
+        Boru Dış Çapı (Do_mm / OD) ve Boru Et Kalınlığı (t_actual_mm / t) girildiğinde,
+        iç çap doğrudan geometrik kural olan D₂₀ = OD - 2×t formülüyle otomatik türetilir.
+        Eğer yalnızca D20_mm verilmişse (eski uyumluluk), D20_mm korunur.
+        """
+        if self.Do_mm is not None and self.t_actual_mm is not None and self.Do_mm > 0:
+            calc_d20 = self.Do_mm - 2.0 * self.t_actual_mm
+            if calc_d20 > 0:
+                self.D20_mm = calc_d20
+            else:
+                raise ValueError(f"Geçersiz boru geometrisi: Dış çap ({self.Do_mm:.1f} mm) et kalınlığının 2 katından ({2.0*self.t_actual_mm:.1f} mm) küçük veya eşit olamaz.")
+        elif self.D20_mm <= 0:
+            raise ValueError("Boru geometrisi eksik: ya Dış Çap (OD) ve Et Kalınlığı (t) ya da geçerli bir İç Çap (D₂₀) girilmelidir.")
 
 
 @dataclass

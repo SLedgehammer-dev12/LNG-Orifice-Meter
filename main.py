@@ -58,14 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help='Bileşim "CH4:0.915,C2H6:0.055,..." (varsayılan BOTAŞ örneği).')
     p.add_argument("--t1", type=float, default=-163.0, help="Çalışma sıcaklığı (°C).")
     p.add_argument("--p1", type=float, default=8.5, help="Emiş basıncı (bar-g).")
-    p.add_argument("--d20", type=float, default=300.0, help="Boru iç çapı @20°C (mm).")
+    p.add_argument("--od", type=float, default=323.85, help="Boru dış çapı OD (mm).")
+    p.add_argument("--t", type=float, default=9.53, help="Boru et kalınlığı t (mm).")
+    p.add_argument("--d20", type=float, default=None, help="Boru iç çapı @20°C (mm). Belirtilmezse OD - 2×t otomatik hesaplanır.")
     p.add_argument("--qm", type=float, default=150.0, help="Nominal debi (ton/saat).")
     p.add_argument("--dp", type=float, default=250.0, help="Hedef ΔP (mbar).")
     p.add_argument("--qmin", type=float, default=30.0, help="Min turndown (%).")
     p.add_argument("--qmax", type=float, default=120.0, help="Max turndown (%).")
     p.add_argument("--L", type=float, default=50.0, help="Hat uzunluğu (m).")
-    p.add_argument("--od", type=float, default=323.9, help="Boru dış çapı (mm).")
-    p.add_argument("--t", type=float, default=9.53, help="Et kalınlığı (mm).")
     p.add_argument("--out", type=str, default=None, help="HTML rapor yolu (varsayılan: lng_orifice_rapor.html).")
     p.add_argument("--no-html", action="store_true", help="HTML raporu üretme.")
     p.add_argument("--json", type=str, default=None, help="Sonuçları JSON dosyasına yaz.")
@@ -78,18 +78,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 def build_inputs(args: argparse.Namespace) -> RunInputs:
     comp = BOTAŞ_DEFAULT_COMP if args.comp is None else parse_comp(args.comp)
+    od = args.od
+    t = args.t
+    # [MÜHENDİSLİK DÜZELTMESİ v1.3.0]: Kullanıcı d20 girmediyse OD - 2*t otomatik türetilir
+    d20 = args.d20 if args.d20 is not None else ((od - 2.0 * t) if (od and t) else 0.0)
     return RunInputs(
         comp=comp,
         T1_C=args.t1,
         P1_barg=args.p1,
-        D20_mm=args.d20,
+        D20_mm=d20,
         qm_nom_ton_h=args.qm,
         dP_target_mbar=args.dp,
         q_min_ratio=args.qmin / 100.0,
         q_max_ratio=args.qmax / 100.0,
         L_pipe_m=args.L,
-        Do_mm=args.od,
-        t_actual_mm=args.t,
+        Do_mm=od,
+        t_actual_mm=t,
     )
 
 

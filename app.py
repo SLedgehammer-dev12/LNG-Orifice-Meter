@@ -50,7 +50,10 @@ FIELD_DEFS: list[tuple[str, str, str, str, str]] = [
      "Çalışma sıcaklığı. LNG için ≈ -160 … -150 °C."),
     ("P1", "Emiş basıncı P₁", "pressure", "8.5",
      "Hat emiş basıncı (varsayılan bar-g; gösterge/mutlak seçilebilir)."),
-    ("D20", "İç çap D₂₀", "diameter", "300.0", "Boru iç çapı @20°C."),
+    ("OD", "Boru Dış Çapı OD", "diameter", "323.85",
+     "Boru nominal dış çapı (ASME B36.19M / B36.10M)."),
+    ("t", "Boru Et Kalınlığı t", "diameter", "9.53",
+     "Boru et kalınlığı. İç çap D₂₀ = OD - 2×t olarak otomatik hesaplanır."),
     ("Qm", "Nominal debi Qm", "flow", "150.0",
      "Nominal debi. Kütle, hacimsel (sıvı) ve enerji birimleri desteklenir;\n"
      "hacimsel/enerji birimleri son hesaplanan yoğunluk/GCV ile çevrilir."),
@@ -58,8 +61,6 @@ FIELD_DEFS: list[tuple[str, str, str, str, str]] = [
     ("qmin", "Turndown min", "percent", "30", "Minimum debi oranı (%)."),
     ("qmax", "Turndown max", "percent", "120", "Maksimum debi oranı (%)."),
     ("L", "Hat uzunluğu L", "length", "50", "Boru uzunluğu — flashing hesabında sürtünme kaybı içindir."),
-    ("OD", "Boru OD", "diameter", "323.9", "Boru dış çapı."),
-    ("t", "Et kalınlığı t", "diameter", "9.53", "Et kalınlığı."),
 ]
 
 ADV_DEFS: list[tuple[str, str, str, str]] = [
@@ -451,30 +452,45 @@ class App(ttk.Frame):
         pipe_frm.pack(fill="x", pady=4)
         pipe_frm.columnconfigure(0, weight=1)
         pipe_frm.columnconfigure(1, weight=1)
-        self._field_cell(pipe_frm, 0, 0, "D20", "İç çap D₂₀", "300.0",
-                         "Boru iç çapı @20°C.", cat="diameter",
-                         desc="Flans ve orifis plakasının devreye alındığı hat iç çapı.")
-        self._field_cell(pipe_frm, 0, 1, "Qm", "Nominal debi Qm", "150.0",
+
+        # [MÜHENDİSLİK DÜZELTMESİ v1.3.0]: Birincil girdi olarak Dış Çap (OD) ve Et Kalınlığı (t) alınır.
+        self._field_cell(pipe_frm, 0, 0, "OD", "Boru Dış Çapı OD", "323.85",
+                         "Boru nominal dış çapı (ASME B36.19M / B36.10M).", cat="diameter",
+                         desc="Standart boru dış çapı; mukavemet ve iç çap hesabında temeldir.")
+        self._field_cell(pipe_frm, 0, 1, "t", "Boru Et Kalınlığı t", "9.53",
+                         "Et kalınlığı. İç çap D₂₀ = OD - 2×t olarak otomatik hesaplanır.", cat="diameter",
+                         desc="Boru et kalınlığı; iç çapı ve basınca dayanımı belirler.")
+
+        # [MÜHENDİSLİK DÜZELTMESİ v1.3.0]: Kullanıcının elle iç çap girmesine gerek yoktur.
+        # D20 = OD - 2*t formülüyle canlı olarak hesaplanır ve ASME boru normuyla birlikte gösterilir.
+        id_info_cell = ttk.Frame(pipe_frm)
+        id_info_cell.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(1, 5))
+        id_info_cell.columnconfigure(0, weight=1)
+        self.d20_auto_lbl = ttk.Label(id_info_cell, text="Otomatik İç Çap D₂₀ = OD - 2t:  304.79 mm  (NPS 12\" (DN 300) Sch 40S)",
+                                      font=("TkDefaultFont", 9, "bold"), foreground="#0b6ea8")
+        self.d20_auto_lbl.grid(row=0, column=0, sticky="w")
+
+        # OD ve t alanlarına canlı izleme (trace) bağla
+        self.field_vars["OD"].trace_add("write", lambda *_: self._update_auto_id())
+        self.field_vars["t"].trace_add("write", lambda *_: self._update_auto_id())
+        self.unit_vars["OD"].trace_add("write", lambda *_: self._update_auto_id())
+        self.unit_vars["t"].trace_add("write", lambda *_: self._update_auto_id())
+
+        self._field_cell(pipe_frm, 2, 0, "Qm", "Nominal debi Qm", "150.0",
                          "Nominal debi. Kütle, hacimsel (sıvı) ve enerji birimleri desteklenir;\n"
                          "hacimsel/enerji birimleri son hesaplanan yoğunluk/GCV ile çevrilir.",
                          cat="flow",
                          desc="Tasarımın baz alındığı nominal kütle/hacim/enerji akışı.")
-        self._field_cell(pipe_frm, 1, 0, "dP", "Hedef ΔP", "250.0",
+        self._field_cell(pipe_frm, 2, 1, "dP", "Hedef ΔP", "250.0",
                          "Nominal akıştaki hedeflenen plaka basınç farkı.", cat="dp",
                          desc="Ölçülecek fark basınç; plaka çapı seçimini (β) belirler.")
-        self._field_cell(pipe_frm, 1, 1, "L", "Hat uzunluğu L", "50",
+        self._field_cell(pipe_frm, 3, 0, "L", "Hat uzunluğu L", "50",
                          "Boru uzunluğu — flashing hesabında sürtünme kaybı içindir.",
                          cat="length",
                          desc="Flanştan sonraki hat uzunluğu; faz ayrışması kontrolünde sürtünme kaybı.")
-        self._field_cell(pipe_frm, 2, 0, "qmin", "Turndown min", "30",
-                         "Minimum debi oranı (%).", suffix="%",
-                         desc="Ölçüm aralığının alt sınırı (nominal debinin yüzdesi).")
-        self._field_cell(pipe_frm, 2, 1, "qmax", "Turndown max", "120",
-                         "Maksimum debi oranı (%).", suffix="%",
-                         desc="Ölçüm aralığının üst sınırı; qmax ΔP üst limitini belirler.")
 
         mat_cell = ttk.Frame(pipe_frm)
-        mat_cell.grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, pady=3)
+        mat_cell.grid(row=3, column=1, sticky="ew", padx=6, pady=3)
         mat_cell.columnconfigure(0, weight=1)
         ttk.Label(mat_cell, text="Malzeme").grid(row=0, column=0, sticky="w")
         self.mat_var = tk.StringVar(value="AISI 304")
@@ -482,12 +498,12 @@ class App(ttk.Frame):
                                  width=12, values=("AISI 304", "AISI 316"))
         mat_combo.grid(row=1, column=0, sticky="w")
 
-        self._field_cell(pipe_frm, 4, 0, "OD", "Boru OD", "323.9",
-                         "Boru dış çapı.", cat="diameter",
-                         desc="Boru dış çapı — B31.3 et kalınlığı denetiminde kullanılır.")
-        self._field_cell(pipe_frm, 4, 1, "t", "Et kalınlığı t", "9.53",
-                         "Et kalınlığı.", cat="diameter",
-                         desc="Mevcut et kalınlığı; minimum gereken et kalınlığıyla karşılaştırılır.")
+        self._field_cell(pipe_frm, 4, 0, "qmin", "Turndown min", "30",
+                         "Minimum debi oranı (%).", suffix="%",
+                         desc="Ölçüm aralığının alt sınırı (nominal debinin yüzdesi).")
+        self._field_cell(pipe_frm, 4, 1, "qmax", "Turndown max", "120",
+                         "Maksimum debi oranı (%).", suffix="%",
+                         desc="Ölçüm aralığının üst sınırı; qmax ΔP üst limitini belirler.")
 
         adv_frm = ttk.LabelFrame(left, text=" 4. Gelişmiş (belirsizlik girdileri) ")
         adv_frm.pack(fill="x", pady=4)
@@ -497,6 +513,26 @@ class App(ttk.Frame):
             r, c = divmod(i, 2)
             self._field_cell(adv_frm, r, c, key, label, default, tip, suffix="%",
                              desc="Debi belirsizliğine (u(q)/q) katkı oranı.")
+
+    def _update_auto_id(self) -> None:
+        """[MÜHENDİSLİK DÜZELTMESİ v1.3.0]: OD ve t değiştikçe iç çapı ve ASME etiketini canlı güncelle."""
+        try:
+            od_mm = self._canonical("OD")
+            t_mm = self._canonical("t")
+            if od_mm > 0 and t_mm > 0 and od_mm > 2.0 * t_mm:
+                id_mm = od_mm - 2.0 * t_mm
+                from safety_engine import identify_pipe
+                pipe_label, _ = identify_pipe(od_mm, t_mm)
+                u_diam = self.unit_vars["OD"].get()
+                disp_id = U.from_canonical(id_mm, u_diam, "diameter")
+                self.d20_auto_lbl.config(
+                    text=f"Otomatik İç Çap D₂₀ = OD - 2t:  {disp_id:.2f} {u_diam}  ({pipe_label})",
+                    foreground="#0b6ea8"
+                )
+            else:
+                self.d20_auto_lbl.config(text="Boru geometrisi geçersiz (OD ≤ 2t)", foreground="#c0392b")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------ girdi/birimler
     def _input_ctx(self) -> dict:
@@ -532,18 +568,22 @@ class App(ttk.Frame):
         material = self.mat_var.get()
         S_mpa = 138.0
         p1_bara = self._canonical("P1")
+        # [MÜHENDİSLİK DÜZELTMESİ v1.3.0]: İç çap doğrudan D20 = OD - 2*t formülüyle otomatik hesaplanır
+        od_mm = self._canonical("OD")
+        t_mm = self._canonical("t")
+        d20_mm = od_mm - 2.0 * t_mm
         return RunInputs(
             comp=comp,
             T1_C=self._canonical("T1"),
             P1_barg=p1_bara - 1.01325,
-            D20_mm=self._canonical("D20"),
+            D20_mm=d20_mm,
             qm_nom_ton_h=self._canonical("Qm"),
             dP_target_mbar=self._canonical("dP"),
             q_min_ratio=self._canonical("qmin"),
             q_max_ratio=self._canonical("qmax"),
             L_pipe_m=self._canonical("L"),
-            Do_mm=self._canonical("OD"),
-            t_actual_mm=self._canonical("t"),
+            Do_mm=od_mm,
+            t_actual_mm=t_mm,
             material=material,
             S_mpa=S_mpa,
             uC_C=self._canonical("uC"),
