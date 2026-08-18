@@ -101,6 +101,49 @@ def main() -> None:
     c_small = rhg_flange_C(beta=0.50, Re_D=2e5, D_mm=50.0)
     check("D=50mm C fiziksel (0.59-0.62)", 0.59 < c_small < 0.62, f"{c_small:.5f}")
 
+    print("\n-- ΔP / β sınır davranışı (monotonluk + ISO uyarıları) --")
+    def _run_beta(D_mm, Q, dP):
+        rr = run_engineering(RunInputs(comp=BOTAŞ_COMP, T1_C=-163.0, P1_barg=8.5,
+                                       D20_mm=D_mm, qm_nom_ton_h=Q, dP_target_mbar=dP))
+        return rr.sizing.beta, rr.sizing.d20_mm, rr.warnings
+
+    # Üst sınır: küçük boru + yüksek debi → β* > 0.75
+    bhi_lo, _d1, w_hi = _run_beta(100.0, 300.0, 5000.0)
+    bhi_hi, _d2, w_valid = _run_beta(100.0, 300.0, 20000.0)
+    check("üst sınırda ΔP monoton (β 5000>20000 mbar)", bhi_lo > bhi_hi,
+          f"{bhi_lo:.4f} -> {bhi_hi:.4f}")
+    check("β*>0.75 iken ISO üst sınır uyarısı",
+          bhi_lo > 0.75 and any("0.75" in w and "üst" in w for w in w_hi), str(w_hi))
+    check("β*<0.75 iken üst sınır uyarısı yok",
+          bhi_hi < 0.75 and not any("üst sınırını (0.75)" in w for w in w_valid), str(w_valid))
+
+    # Alt sınır: büyük boru + düşük debi + yüksek ΔP → β* < 0.10
+    blo_hi, _d3, w_lo = _run_beta(400.0, 30.0, 5000.0)
+    blo_lo, _d4, _w4 = _run_beta(400.0, 30.0, 1000.0)
+    check("alt sınırda ΔP monoton (β 1000>5000 mbar)", blo_lo > blo_hi,
+          f"{blo_lo:.4f} -> {blo_hi:.4f}")
+    check("β*<0.10 iken ISO alt sınır uyarısı",
+          blo_hi < 0.10 and any("0.10" in w and "alt" in w for w in w_lo),
+          f"β={blo_hi:.4f} {str(w_lo)}")
+    check("fizik dışı 0.75 sıçraması yok (alt sınır senaryosu)", blo_hi < 0.10,
+          f"β={blo_hi:.4f} (eski davranış 0.75 kilitlenmesiydi)")
+
+    print("\n-- Parametrik tarama motoru --")
+    from parametric import SWEEP_KEYS, linspace, sweep
+    check("linspace adımlar", len(linspace(1.0, 5.0, 5)) == 5)
+    base_inp = RunInputs(comp=BOTAŞ_COMP, T1_C=-163.0, P1_barg=8.5,
+                         D20_mm=304.79, qm_nom_ton_h=150.0, dP_target_mbar=250.0)
+    dP_rows = sweep(base_inp, "dP", [100.0, 250.0, 500.0])
+    check("ΔP taraması 3 satır", len(dP_rows) == 3)
+    check("ΔP tarama monoton (β artan ΔP ile azalır)",
+          dP_rows[0].beta > dP_rows[1].beta > dP_rows[2].beta,
+          f"{dP_rows[0].beta:.4f} -> {dP_rows[1].beta:.4f} -> {dP_rows[2].beta:.4f}")
+    check("D taraması Do_mm'yi yok sayar (D20 kontrol)",
+          abs(sweep(base_inp, "D", [250.0, 300.0])[0].value - 250.0) < 1e-9)
+    bad_rows = sweep(base_inp, "Qm", [-5.0])
+    check("geçersiz satır düşmez", len(bad_rows) == 1 and not bad_rows[0].ok)
+    check("SWEEP_KEYS birim meta verisi", SWEEP_KEYS["dP"] == ("ΔP hedefi", "mbar"))
+
     print("\n-- ASME B36.19M / B36.10M Kütüphane Testleri (NPS 36'ya kadar) --")
     from safety_engine import identify_pipe, recommend_schedule
     label_12, sch_12 = identify_pipe(323.85, 9.53)

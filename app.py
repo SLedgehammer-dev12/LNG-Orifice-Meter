@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import units as U
 from engine import RunInputs, run_engineering
+from parametric import SWEEP_KEYS, linspace, sweep
 from report import build_html, print_console_summary
 from schematic import draw as draw_schematic
 from settings import load as load_settings, save as save_settings
@@ -154,6 +155,7 @@ class App(ttk.Frame):
         self.result = None
         self._checking = False
         self._redraw_job: str | None = None
+        self._recalc_job: str | None = None
         self._prev_unit: dict[tuple[str, str], str] = {}
         self._suppress_convert = False
 
@@ -196,6 +198,9 @@ class App(ttk.Frame):
     # -------------------------------------------------------------------- menü
     def _build_menu(self) -> None:
         menubar = tk.Menu(self.root)
+        analysis_menu = tk.Menu(menubar, tearoff=0)
+        analysis_menu.add_command(label="Parametrik Tarama (ΔP / Q / D)", command=self.show_parametric)
+        menubar.add_cascade(label="Analiz", menu=analysis_menu)
         help_menu = tk.Menu(menubar, tearoff=0)
         help_menu.add_command(label="Hakkında", command=self.show_about)
         help_menu.add_separator()
@@ -203,6 +208,142 @@ class App(ttk.Frame):
         help_menu.add_command(label="Güncelleme Kontrolü", command=self.check_updates)
         menubar.add_cascade(label="Yardım", menu=help_menu)
         self.root.config(menu=menubar)
+
+    def show_parametric(self) -> None:
+        """Parametrik ΔP/Q/D tarama penceresi (v1.4.0): tek değişkeni (ΔP, Qm veya
+        D₂₀) min–max–adım aralığında tarar; β, d₂₀, hız, u(q)/q, ΔP@Qmax ve durum
+        sütunlu bir tablo üretir. Motor: parametric.sweep (GUI'den bağımsız)."""
+        pal = palette()
+        win = tk.Toplevel(self.root)
+        win.title("Parametrik Tarama (ΔP / Q / D)")
+        win.geometry("760x560")
+        win.minsize(600, 400)
+
+        try:
+            base = self.collect_inputs()
+            self._validate(base)
+        except ValueError as e:
+            messagebox.showerror("Parametrik Tarama", f"Önce geçerli girdi gerekli:\n{e}", parent=win)
+            win.destroy()
+            return
+
+        current = {
+            "dP": self._canonical("dP"),
+            "Qm": self._canonical("Qm"),
+            "D": self._canonical("OD") - 2.0 * self._canonical("t"),
+        }
+        defaults = {
+            "dP": (max(current["dP"] * 0.5, 10.0), current["dP"] * 2.0),
+            "Qm": (max(current["Qm"] * 0.5, 1.0), current["Qm"] * 2.0),
+            "D": (current["D"] * 0.7, current["D"] * 1.3),
+        }
+
+        ctl = ttk.Frame(win)
+        ctl.pack(fill="x", padx=10, pady=8)
+
+        ttk.Label(ctl, text="Değişken:").grid(row=0, column=0, sticky="w")
+        var_key = tk.StringVar(value="dP")
+        var_combo = ttk.Combobox(ctl, textvariable=var_key, state="readonly", width=16,
+                                 values=tuple(SWEEP_KEYS))
+        var_combo.grid(row=0, column=1, padx=(4, 10), sticky="w")
+
+        ttk.Label(ctl, text="Min:").grid(row=0, column=2, sticky="w")
+        min_var = tk.StringVar(value=f"{defaults['dP'][0]:g}")
+        ttk.Entry(ctl, textvariable=min_var, width=9, justify="right").grid(
+            row=0, column=3, padx=4)
+        ttk.Label(ctl, text="Max:").grid(row=0, column=4, sticky="w")
+        max_var = tk.StringVar(value=f"{defaults['dP'][1]:g}")
+        ttk.Entry(ctl, textvariable=max_var, width=9, justify="right").grid(
+            row=0, column=5, padx=4)
+        ttk.Label(ctl, text="Adım:").grid(row=0, column=6, sticky="w")
+        steps_var = tk.StringVar(value="10")
+        ttk.Entry(ctl, textvariable=steps_var, width=5, justify="right").grid(
+            row=0, column=7, padx=(4, 10))
+
+        unit_lbl = ttk.Label(ctl, text="", style="hint.TLabel")
+        unit_lbl.grid(row=1, column=1, columnspan=4, sticky="w", pady=(2, 0))
+
+        def _sync_defaults(_e=None) -> None:
+            key = var_key.get()
+            dmin, dmax = defaults[key]
+            min_var.set(f"{dmin:g}")
+            max_var.set(f"{dmax:g}")
+            unit_lbl.config(text=f"Birim: {SWEEP_KEYS[key][1]}")
+        var_combo.bind("<<ComboboxSelected>>", _sync_defaults)
+        _sync_defaults()
+
+        tree = ttk.Treeview(win, columns=("val", "beta", "d20", "vel", "u", "dpmax", "ok", "note"),
+                            show="headings", height=14)
+        tree.heading("val", text="Değer")
+        tree.heading("beta", text="β")
+        tree.heading("d20", text="d₂₀ (mm)")
+        tree.heading("vel", text="Hız (m/s)")
+        tree.heading("u", text="u(q)/q (%)")
+        tree.heading("dpmax", text="ΔP@Qmax (mbar)")
+        tree.heading("ok", text="Durum")
+        tree.heading("note", text="Not")
+        tree.column("val", width=70, anchor="e")
+        tree.column("beta", width=70, anchor="e")
+        tree.column("d20", width=80, anchor="e")
+        tree.column("vel", width=80, anchor="e")
+        tree.column("u", width=80, anchor="e")
+        tree.column("dpmax", width=110, anchor="e")
+        tree.column("ok", width=70, anchor="center")
+        tree.column("note", width=260, anchor="w")
+        vsb = ttk.Scrollbar(win, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(fill="both", expand=True, padx=10)
+        vsb.pack(side="right", fill="y", padx=(0, 10))
+
+        status_lbl = ttk.Label(win, text="", style="hint.TLabel")
+        status_lbl.pack(fill="x", padx=10, pady=(4, 0))
+
+        btns = ttk.Frame(win)
+        btns.pack(fill="x", padx=10, pady=8)
+
+        def _run() -> None:
+            key = var_key.get()
+            try:
+                vmin = float(min_var.get().replace(",", "."))
+                vmax = float(max_var.get().replace(",", "."))
+                steps = int(steps_var.get())
+            except ValueError:
+                messagebox.showerror("Parametrik Tarama", "Min/Max/Adım sayısal olmalı.", parent=win)
+                return
+            if vmin >= vmax or steps < 2 or steps > 200:
+                messagebox.showerror("Parametrik Tarama", "Min<Max ve 2≤Adım≤200 olmalı.", parent=win)
+                return
+            values = linspace(vmin, vmax, steps)
+            for item in tree.get_children():
+                tree.delete(item)
+            win.config(cursor="watch")
+            try:
+                rows = sweep(base, key, values)
+            finally:
+                win.config(cursor="")
+            n_ok = 0
+            for i, row in enumerate(rows):
+                if row.ok:
+                    n_ok += 1
+                tag = "normal" if row.ok else "warn"
+                tree.insert("", "end", iid=str(i), values=(
+                    f"{row.value:.4g}",
+                    f"{row.beta:.4f}" if row.beta == row.beta else "—",
+                    f"{row.d20_mm:.2f}" if row.d20_mm == row.d20_mm else "—",
+                    f"{row.velocity_m_s:.2f}" if row.velocity_m_s == row.velocity_m_s else "—",
+                    f"{row.u_flow_pct:.2f}" if row.u_flow_pct == row.u_flow_pct else "—",
+                    f"{row.dP_max_mbar:.1f}" if row.dP_max_mbar == row.dP_max_mbar else "—",
+                    "GÜVENLİ" if row.ok else "UYARI",
+                    row.note[:80],
+                ), tags=(tag,))
+            status_lbl.config(
+                text=f"{len(rows)} nokta tarandı — {n_ok} güvenli, {len(rows) - n_ok} uyarı/hatalı "
+                     f"({SWEEP_KEYS[key][0]}, birim {SWEEP_KEYS[key][1]}).")
+            win.attributes("-topmost", True)
+            win.after(100, lambda: win.attributes("-topmost", False))
+
+        ttk.Button(btns, text="Tara", command=_run).pack(side="left")
+        ttk.Button(btns, text="Kapat", command=win.destroy).pack(side="left", padx=8)
 
     def show_about(self) -> None:
         pal = palette()
@@ -393,7 +534,8 @@ class App(ttk.Frame):
                       justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(1, 0))
 
         self.field_vars[key] = var
-        var.trace_add("write", lambda *_: self._schedule_redraw())
+        # v1.4.0: girdi değişince şemayı yeniden çiz + canlı (debounce'lu) yeniden hesapla
+        var.trace_add("write", lambda *_: (self._schedule_redraw(), self._schedule_recalc()))
 
     def _on_unit_var_write(self, key: str, cat: str, var: tk.StringVar, *_args) -> None:
         new = var.get()
@@ -426,7 +568,8 @@ class App(ttk.Frame):
             ToolTip(lab, f"{comp} mol kesri (0 … 1).")
             ToolTip(ent, f"{comp} mol kesri (0 … 1).")
             self.comp_vars[comp] = var
-            var.trace_add("write", lambda *_: self._update_comp_sum())
+            # v1.4.0: bileşim değişince toplam etiketi güncelle + canlı yeniden hesapla
+            var.trace_add("write", lambda *_: (self._update_comp_sum(), self._schedule_recalc()))
         ttk.Label(comp_frm, text="Toplam:").grid(row=4, column=0, sticky="e", pady=(4, 2))
         self.comp_sum_lbl = ttk.Label(comp_frm, text="", style="sec.TLabel")
         self.comp_sum_lbl.grid(row=4, column=1, columnspan=2, sticky="w")
@@ -623,7 +766,9 @@ class App(ttk.Frame):
         self._populate_results(self.result)
         self._update_status(self.result)
         self._draw_schematic()
-        print_console_summary(self.result)
+        # v1.4.0: canlı (sessiz) yeniden hesaplamada konsol özeti basma — yazarken spam olmasın
+        if not silent:
+            print_console_summary(self.result)
 
     # ------------------------------------------------------------------- sonuçlar
     def _populate_results(self, r) -> None:
@@ -685,6 +830,18 @@ class App(ttk.Frame):
         if self._redraw_job is not None:
             self.root.after_cancel(self._redraw_job)
         self._redraw_job = self.root.after(120, self._draw_schematic)
+
+    def _schedule_recalc(self) -> None:
+        """Canlı hesaplama (v1.4.0): girdi değişimlerini 400 ms sonra sessizce
+        yeniden hesaplar. Hesapla/Enter'a gerek kalmadan sonuçlar güncellenir;
+        geçersiz/eksik girdide run_calc(silent=True) sessizce döner (hata yok)."""
+        if self._recalc_job is not None:
+            self.root.after_cancel(self._recalc_job)
+        self._recalc_job = self.root.after(400, self._run_calc_silent)
+
+    def _run_calc_silent(self) -> None:
+        self._recalc_job = None
+        self.run_calc(silent=True)
 
     def _draw_schematic(self) -> None:
         self._redraw_job = None

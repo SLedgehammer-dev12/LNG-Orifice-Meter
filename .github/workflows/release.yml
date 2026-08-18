@@ -47,8 +47,8 @@ jobs:
               --windows-product-name="LNG Orifice Meter"
               --windows-file-description="LNG Orifice Meter - ISO 5167-2 orifis boyutlandirma araci"
               --windows-icon-from-ico=assets/icon.ico
-              --windows-file-version=1.3.0.0
-              --windows-product-version=1.3.0
+              --windows-file-version=1.4.0.0
+              --windows-product-version=1.4.0
           - os: macos-14
             artifact: LNG-Orifice-Meter-macOS-arm64
             file: LNG-Orifice-Meter-macOS-arm64.zip
@@ -57,7 +57,7 @@ jobs:
               --macos-create-app-bundle
               --macos-app-mode=gui
               --macos-app-name="LNG-Orifice-Meter"
-              --macos-app-version="1.3.0"
+              --macos-app-version="1.4.0"
               --macos-app-icon=assets/icon.icns
     runs-on: ${{ matrix.os }}
     steps:
@@ -89,8 +89,8 @@ jobs:
         run: |
           rm -rf "LNG-Orifice-Meter.dist"
           mv "main.app" "LNG-Orifice-Meter.app"
-          plutil -replace CFBundleShortVersionString -string "1.3.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
-          plutil -replace CFBundleVersion -string "1.3.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
+          plutil -replace CFBundleShortVersionString -string "1.4.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
+          plutil -replace CFBundleVersion -string "1.4.0" "LNG-Orifice-Meter.app/Contents/Info.plist"
           plutil -replace CFBundleName -string "LNG Orifice Meter" "LNG-Orifice-Meter.app/Contents/Info.plist"
           plutil -insert NSHumanReadableCopyright -string "Copyright (c) 2026 SLedgehammer Engineering" "LNG-Orifice-Meter.app/Contents/Info.plist"
           codesign --force --deep --sign - "LNG-Orifice-Meter.app"

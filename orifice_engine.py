@@ -65,8 +65,20 @@ class BetaSolution:
 
 
 def solve_beta(E: float, Re_D: float, D_mm: float) -> BetaSolution:
+    """β (d/D) çözücü: ISO 5167-2 akış denklemini Newton-Raphson (NR) ile çözer.
+
+    v1.4.0 iyileştirmesi:
+    - Bisection yedeği artık [0.02, 0.98] tam fiziksel aralıkta çalışır; eski
+      [0.10, 0.75] aralığı, gerçek çözümün sınır dışında kaldığı durumlarda kökü
+      yakalayamayıp β'yı yanlış uca (0.75) kilitlerdi → ΔP artırınca sonuç
+      değişmezdi (ve bazı senaryolarda fizik dışı sıçrama üretirdi).
+    - Gerçek β* döndürülür; ISO geçerlilik aralığı (β*=0.10–0.75) dışındaki
+      çözümler için uygulanabilir telkin içeren net violation üretilir
+      (engine.RunResult.warnings → GUI "Uyarılar" bölümü ve raporda görünür).
+    """
     if not (0.0 < E < 10.0):
         raise ValueError(f"Akış faktörü E fiziksel aralık dışında: {E}")
+
     beta = NR_BETA0
     conv = False
     it = 0
@@ -86,34 +98,56 @@ def solve_beta(E: float, Re_D: float, D_mm: float) -> BetaSolution:
             conv = True
             break
         beta = b_next
-    method = "Newton-Raphson"
 
-    if not conv or not (BETA_MIN_VALID <= beta <= BETA_MAX_VALID + 1e-9):
-        lo, hi = 0.10, 0.75
+    if conv and 0.02 < beta < 0.98:
+        method = "Newton-Raphson"
+    else:
+        lo, hi = 0.02, 0.98
         glo = g_beta(lo, E, Re_D, D_mm)
         ghi = g_beta(hi, E, Re_D, D_mm)
-        for _ in range(200):
-            mid = 0.5 * (lo + hi)
-            gmid = g_beta(mid, E, Re_D, D_mm)
-            if abs(gmid) < 1e-11 or (hi - lo) < 1e-12:
-                beta = mid
-                break
-            if glo * gmid <= 0.0:
-                hi = mid
-                ghi = gmid
-            else:
-                lo = mid
-                glo = gmid
         method = "Bisection (NR yedek)"
-        conv = True
+        if glo == 0.0:
+            beta = lo
+            conv = True
+        elif ghi == 0.0:
+            beta = hi
+            conv = True
+        elif glo * ghi > 0.0:
+            beta = lo if abs(glo) < abs(ghi) else hi
+            conv = False
+        else:
+            conv = True
+            for _ in range(200):
+                mid = 0.5 * (lo + hi)
+                gmid = g_beta(mid, E, Re_D, D_mm)
+                if abs(gmid) < 1e-11 or (hi - lo) < 1e-12:
+                    beta = mid
+                    break
+                if glo * gmid <= 0.0:
+                    hi = mid
+                    ghi = gmid
+                else:
+                    lo = mid
+                    glo = gmid
 
     C = rhg_flange_C(beta, Re_D, D_mm)
     dCdb = dC_dbeta_num(beta, Re_D, D_mm)
 
     violations: list[str] = []
-    if beta < BETA_MIN_VALID or beta > BETA_MAX_VALID:
+    if beta < BETA_MIN_VALID:
         violations.append(
-            f"β={beta:.4f} ISO 5167-2 geçerlilik aralığının ({BETA_MIN_VALID:.2f}–{BETA_MAX_VALID:.2f}) dışında."
+            f"β*={beta:.4f} ISO 5167-2 alt sınırının ({BETA_MIN_VALID:.2f}) altında — plaka deliği çok küçük, "
+            "ölçüm standardı dışı. ΔP hedefini azaltın, boru çapını küçültün veya debiyi artırın."
+        )
+    elif beta > BETA_MAX_VALID:
+        violations.append(
+            f"β*={beta:.4f} ISO 5167-2 üst sınırını ({BETA_MAX_VALID:.2f}) aşıyor — plaka deliği çok büyük, "
+            "ölçüm standardı dışı. ΔP hedefini artırın, boru çapını büyütün veya debiyi azaltın."
+        )
+    if beta >= 0.98 - 1e-9:
+        violations.append(
+            "β*≥0.98: gereken plaka deliği boru çapına yakın; bu ΔP ile tasarım fiziksel olarak çözülemiyor, "
+            "ΔP hedefini artırın veya boru çapını büyütün."
         )
     if beta < BETA_RECOMMENDED_MIN:
         violations.append(
