@@ -97,7 +97,7 @@ jobs:
           zip -r LNG-Orifice-Meter-macOS-arm64.zip "LNG-Orifice-Meter.app"
           rm -rf "LNG-Orifice-Meter.app"
       - name: Derleme çıktısı
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: dist/${{ matrix.file }}
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Derlemeleri indir
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Paket listesi
